@@ -110,7 +110,7 @@
         }
 
         async function handle(date, act) {
-            if(!confirm("確定要" + (act==='add'?'登記':'取消') + " " + date + "?")) return;
+            //if(!confirm("確定要" + (act==='add'?'登記':'取消') + " " + date + "?")) return;
             await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: act, date: date, lineId: user.userId, name: user.displayName }) });
             await liff.sendMessages([{ type: 'text', text: (act==='add'?'✅':'❌') + " 已完成" + (act==='add'?'登記':'取消') + "：" + date }]);
             location.reload();
@@ -135,3 +135,4 @@
     </script>
 </body>
 </html>
+
