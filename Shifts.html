@@ -1,54 +1,88 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>排班小助手</title>
+    <title>排班系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+        /* 簡單的切換動畫 */
+        .page-transition { transition: all 0.3s ease-in-out; }
+        .active-tab { color: #2563eb; border-top: 3px solid #2563eb; }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen pb-10">
+<body class="bg-slate-50 min-h-screen pb-24">
 
-    <div class="fixed bottom-0 left-0 right-0 bg-white border-t flex z-50">
-        <button onclick="showPage('apply')" class="flex-1 py-3 text-center font-bold text-blue-600 border-r">我要排班</button>
-        <button onclick="showPage('record')" class="flex-1 py-3 text-center font-bold text-gray-600">我的紀錄</button>
-    </div>
+    <header class="bg-white shadow-sm sticky top-0 z-40 p-4 border-b">
+        <h1 id="headerTitle" class="text-lg font-bold text-slate-800 text-center">排班系統</h1>
+    </header>
 
-    <div id="page-apply" class="p-4">
-        <div class="bg-white rounded-2xl shadow p-6 mb-4 mt-2">
-            <h1 id="targetMonthLabel" class="text-xl font-bold text-center">載入中...</h1>
+    <main id="page-apply" class="p-4 page-transition">
+        <div class="bg-blue-600 rounded-2xl shadow-lg p-6 mb-6 text-white text-center">
+            <h2 id="targetMonthLabel" class="text-2xl font-black italic tracking-wider">載入中...</h2>
         </div>
-        <div id="calendarList" class="space-y-3"></div>
-    </div>
-
-    <div id="page-record" class="hidden p-4">
-        <div class="bg-white rounded-2xl shadow p-6 mb-4 mt-2">
-            <h2 class="text-lg font-bold mb-3">查詢個人排班</h2>
-            <select id="queryYM" onchange="fetchMyRecords()" class="w-full border p-2 rounded-lg"></select>
+        <div id="calendarList" class="space-y-3">
+            <div class="animate-pulse flex space-x-4 p-4 bg-white rounded-xl shadow-sm">
+                <div class="rounded-full bg-slate-200 h-10 w-10"></div>
+                <div class="flex-1 space-y-3 py-1">
+                    <div class="h-2 bg-slate-200 rounded"></div>
+                    <div class="h-2 bg-slate-200 rounded w-5/6"></div>
+                </div>
+            </div>
         </div>
-        <div id="myRecordList" class="space-y-2"></div>
-    </div>
+    </main>
+
+    <main id="page-record" class="hidden p-4 page-transition">
+        <div class="bg-white rounded-2xl shadow-md p-6 mb-6 border border-slate-100">
+            <label class="block text-sm font-bold text-slate-500 mb-2">查詢排班</label>
+            <select id="queryYM" onchange="fetchMyRecords()" class="w-full bg-slate-50 border-0 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 font-medium text-slate-700 shadow-inner">
+                </select>
+        </div>
+        <div id="myRecordList" class="space-y-3">
+            </div>
+    </main>
+
+    <nav class="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-200 flex z-50 shadow-2xl">
+        <button id="tab-apply" onclick="showPage('apply')" class="flex-1 py-4 flex flex-col items-center gap-1 transition-colors">
+            <span class="text-xl">📅</span>
+            <span class="text-[10px] font-bold uppercase tracking-widest">排班登記</span>
+        </button>
+        <button id="tab-record" onclick="showPage('record')" class="flex-1 py-4 flex flex-col items-center gap-1 transition-colors">
+            <span class="text-xl">👤</span>
+            <span class="text-[10px] font-bold uppercase tracking-widest">班表查詢</span>
+        </button>
+    </nav>
 
     <script>
         const GAS_URL = "https://script.google.com/macros/s/AKfycbxdP936FOYc0ccKaj9xUgTk23idCtlQ8gigIB3Ux2ZTR9mNwRx3AEadi0VzVqdMwhSnZQ/exec";
         const LIFF_ID = "2009203505-YoXdzhWv";
+        
         let user = {};
         let counts = {}, myDates = [];
         let tYear, tMonth;
 
         async function init() {
-            await liff.init({ liffId: LIFF_ID });
-            if (!liff.isLoggedIn()) { liff.login(); return; }
-            user = await liff.getProfile();
-            
-            // 計算下下個月
-            const d = new Date();
-            const target = new Date(d.getFullYear(), d.getMonth() + 2, 1);
-            tYear = target.getFullYear(); tMonth = target.getMonth() + 1;
-            document.getElementById('targetMonthLabel').innerText = `📅 ${tYear}年 ${tMonth}月 排班登記`;
+            try {
+                await liff.init({ liffId: LIFF_ID });
+                if (!liff.isLoggedIn()) { liff.login(); return; }
+                user = await liff.getProfile();
+                
+                // 1. 計算下下個月
+                const d = new Date();
+                const target = new Date(d.getFullYear(), d.getMonth() + 2, 1);
+                tYear = target.getFullYear(); tMonth = target.getMonth() + 1;
+                document.getElementById('targetMonthLabel').innerText = `${tYear}年 ${tMonth}月`;
 
-            setupQueryOptions();
-            refresh();
+                setupQueryOptions();
+                await refresh(); 
+
+                // 2. 路由判斷：檢查 URL 參數 ?page=record
+                const urlParams = new URLSearchParams(window.location.search);
+                const pageParam = urlParams.get('page');
+                showPage(pageParam === 'record' ? 'record' : 'apply');
+
+            } catch (err) { alert("LIFF 初始化失敗"); }
         }
 
         function setupQueryOptions() {
@@ -57,9 +91,10 @@
             for(let i=0; i<=2; i++) {
                 let d = new Date(now.getFullYear(), now.getMonth() + i, 1);
                 let val = `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}`;
-                sel.add(new Option(`${d.getFullYear()}年 ${d.getMonth()+1}月`, val));
+                let text = `${d.getFullYear()}年 ${d.getMonth()+1}月`;
+                sel.add(new Option(text, val));
             }
-            sel.selectedIndex = 2; // 預設選中下下個月
+            sel.selectedIndex = 2; // 預設顯示下下個月選項
         }
 
         async function refresh() {
@@ -73,31 +108,55 @@
             const list = document.getElementById('calendarList');
             list.innerHTML = '';
             const days = new Date(tYear, tMonth, 0).getDate();
+
             for(let i=1; i<=days; i++) {
-                let date = `${tYear}-${tMonth.toString().padStart(2,'0')}-${i.toString().padStart(2,'0')}`;
-                let count = counts[date] || 0;
-                let isMine = myDates.includes(date);
+                let dateStr = `${tYear}-${tMonth.toString().padStart(2,'0')}-${i.toString().padStart(2,'0')}`;
+                let count = counts[dateStr] || 0;
+                let isMine = myDates.includes(dateStr);
                 let isFull = count >= 6;
                 
                 let card = document.createElement('div');
-                card.className = `flex justify-between items-center p-4 bg-white rounded-xl shadow-sm border ${isMine ? 'border-blue-500 ring-1 ring-blue-500' : ''}`;
+                card.className = `flex justify-between items-center p-4 bg-white rounded-2xl shadow-sm border transition-all ${isMine ? 'border-blue-500 bg-blue-50' : 'border-slate-100'}`;
                 card.innerHTML = `
-                    <div><b class="text-lg">${i}日</b> <span class="text-xs ${isFull?'text-red-500':'text-blue-500'} ml-2">${isMine?'(已登記)':(isFull?'已滿':'剩 '+(6-count))}</span></div>
-                    <button onclick="handle('${date}', '${isMine?'cancel':'add'}')" class="px-4 py-2 rounded-lg font-bold text-white ${isMine?'bg-red-500':(isFull?'bg-gray-300':'bg-blue-600')}">${isMine?'取消':(isFull?'滿額':'登記')}</button>
+                    <div class="flex flex-col">
+                        <span class="text-lg font-black text-slate-700">${i}日</span>
+                        <span class="text-[10px] font-bold ${isMine?'text-blue-600':(isFull?'text-red-500':'text-slate-400')} uppercase">
+                            ${isMine ? '★ 已登記' : (isFull ? '● 滿額' : '名額: ' + (6-count))}
+                        </span>
+                    </div>
+                    <button onclick="handle('${dateStr}', '${isMine?'cancel':'add'}')" 
+                        ${isFull && !isMine ? 'disabled' : ''}
+                        class="px-6 py-2 rounded-xl font-bold text-sm transition-all shadow-md ${isMine?'bg-red-500 text-white':(isFull?'bg-slate-200 text-slate-400 cursor-not-allowed':'bg-blue-600 text-white')}">
+                        ${isMine ? '取消' : (isFull ? '滿額' : '登記')}
+                    </button>
                 `;
                 list.appendChild(card);
             }
         }
 
         async function handle(date, act) {
-            if(!confirm(`確定要${act==='add'?'登記':'取消'} ${date}？`)) return;
-            await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: act, date, lineId: user.userId, name: user.displayName }) });
-            location.reload();
+            const actionText = act === 'add' ? '登記' : '取消';
+            if(!confirm(`確定要${actionText} ${date} 的排班？`)) return;
+
+            try {
+                await fetch(GAS_URL, { 
+                    method: 'POST', 
+                    body: JSON.stringify({ action: act, date, lineId: user.userId, name: user.displayName }) 
+                });
+                await liff.sendMessages([{ type: 'text', text: `${act==='add'?'✅':'❌'} 已${actionText}：${date}` }]);
+                location.reload(); 
+            } catch (e) { alert("連線失敗，請重試"); }
         }
 
         function showPage(p) {
             document.getElementById('page-apply').classList.toggle('hidden', p!=='apply');
             document.getElementById('page-record').classList.toggle('hidden', p!=='record');
+            
+            // UI 反饋
+            document.getElementById('tab-apply').classList.toggle('active-tab', p==='apply');
+            document.getElementById('tab-record').classList.toggle('active-tab', p==='record');
+            document.getElementById('headerTitle').innerText = p==='apply' ? '排班登記' : '班表查詢';
+
             if(p==='record') fetchMyRecords();
         }
 
@@ -105,7 +164,18 @@
             const ym = document.getElementById('queryYM').value;
             const res = await fetch(`${GAS_URL}?action=getMyList&lineId=${user.userId}&ym=${ym}`);
             const list = await res.json();
-            document.getElementById('myRecordList').innerHTML = list.length ? list.map(d => `<div class="bg-white p-3 rounded-lg shadow-sm border-l-4 border-blue-500">${d}</div>`).join('') : '<p class="text-center text-gray-400 mt-10">查無紀錄</p>';
+            
+            const listEl = document.getElementById('myRecordList');
+            if (list.length === 0) {
+                listEl.innerHTML = `<div class="text-center py-20 text-slate-300 font-bold">目前無排班資料</div>`;
+            } else {
+                listEl.innerHTML = list.map(d => `
+                    <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500 flex justify-between items-center">
+                        <span class="font-bold text-slate-700">${d}</span>
+                        <span class="text-[10px] bg-blue-100 text-blue-600 px-2 py-1 rounded-md font-bold uppercase">Confirmed</span>
+                    </div>
+                `).join('');
+            }
         }
 
         init();
