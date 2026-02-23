@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>排班系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+    <div class="max-w-md mx-auto p-4">
+        <div class="bg-white rounded-3xl shadow-xl p-6 mb-4 border border-slate-100 mt-4">
+            <h1 id="monthTitle" class="text-2xl font-black text-slate-800 text-center">載入中...</h1>
+        </div>
+
+        <div id="dateList" class="space-y-3 pb-20">
+            <div class="flex justify-center py-10">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbxdP936FOYc0ccKaj9xUgTk23idCtlQ8gigIB3Ux2ZTR9mNwRx3AEadi0VzVqdMwhSnZQ/exec";
+        const LIFF_ID = "你的_LIFF_ID";
+        
+        let userProfile = {};
+        let shiftCounts = {};
+        let myRegistrations = [];
+        let targetYear, targetMonth;
+
+        async function main() {
+            try {
+                await liff.init({ liffId: LIFF_ID });
+                if (!liff.isLoggedIn()) {
+                    liff.login();
+                    return;
+                }
+                userProfile = await liff.getProfile();
+                
+                // 1. 設定下下個月日期
+                const now = new Date();
+                const targetDate = new Date(now.getFullYear(), now.getMonth() + 2, 1);
+                targetYear = targetDate.getFullYear();
+                targetMonth = targetDate.getMonth() + 1;
+                document.getElementById('monthTitle').innerText = `📅 ${targetYear}年 ${targetMonth}月 排班登記`;
+
+                // 2. 獲取資料並渲染
+                await refreshData();
+            } catch (err) {
+                alert("初始化失敗: " + err);
+            }
+        }
+
+        async function refreshData() {
+            const res = await fetch(GAS_URL);
+            const data = await res.json();
+            shiftCounts = data.counts;
+            myRegistrations = data.raw;
+            renderCalendar();
+        }
+
+        function renderCalendar() {
+            const listEl = document.getElementById('dateList');
+            listEl.innerHTML = '';
+            
+            const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+            const currentUserId = userProfile.userId;
+
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dateKey = `${targetYear}-${targetMonth.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
+                const count = shiftCounts[dateKey] || 0;
+                const isMine = myRegistrations.includes(`${dateKey}_${currentUserId}`);
+                const isFull = count >= 6;
+
+                const card = document.createElement('div');
+                card.className = `flex justify-between items-center p-4 rounded-2xl border transition-all ${
+                    isMine ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-200' : 
+                    (isFull ? 'bg-slate-50 border-slate-200 opacity-70' : 'bg-white border-slate-100 shadow-sm')
+                }`;
+
+                let statusLabel = isMine ? '🔵 已登記' : (isFull ? '🔴 已滿額' : `🟢 剩餘 ${6 - count} 名額`);
+                let btnText = isMine ? '取消' : (isFull ? '滿額' : '登記');
+                let btnColor = isMine ? 'bg-red-500 shadow-red-100' : (isFull ? 'bg-slate-300' : 'bg-blue-600 shadow-blue-100');
+                let onClick = isMine ? `handleAction('${dateKey}', 'cancel')` : `handleAction('${dateKey}', 'add')`;
+
+                card.innerHTML = `
+                    <div class="flex flex-col">
+                        <span class="text-lg font-bold text-slate-700">${d}日</span>
+                        <span class="text-xs font-semibold ${isMine ? 'text-blue-600' : (isFull ? 'text-red-400' : 'text-slate-400')}">${statusLabel}</span>
+                    </div>
+                    <button onclick="${onClick}" ${isFull && !isMine ? 'disabled' : ''} 
+                        class="px-6 py-2 rounded-xl font-bold text-white transition-all active:scale-95 shadow-lg ${btnColor}">
+                        ${btnText}
+                    </button>
+                `;
+                listEl.appendChild(card);
+            }
+        }
+
+        async function handleAction(date, action) {
+            const confirmMsg = action === 'cancel' ? `確定要取消 ${date} 的排班嗎？` : `確定要登記 ${date} 的排班嗎？`;
+            if (!confirm(confirmMsg)) return;
+
+            const payload = {
+                action: action,
+                date: date,
+                name: userProfile.displayName,
+                lineId: userProfile.userId
+            };
+
+            try {
+                const response = await fetch(GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+                const resData = await response.json();
+                
+                if (resData.result) {
+                    const lineMsg = action === 'cancel' ? `❌ 已取消 ${date} 的排班` : `✅ 已成功登記 ${date} 的排班`;
+                    await liff.sendMessages([{ type: 'text', text: lineMsg }]);
+                    alert("操作成功！");
+                    location.reload(); 
+                }
+            } catch (err) {
+                alert("操作失敗，請稍後再試");
+            }
+        }
+
+        main();
+    </script>
+</body>
+</html>
