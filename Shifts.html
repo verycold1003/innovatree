@@ -1,181 +1,134 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>排班系統</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <title>排班助手</title>
     <style>
-        /* 簡單的切換動畫 */
-        .page-transition { transition: all 0.3s ease-in-out; }
-        .active-tab { color: #2563eb; border-top: 3px solid #2563eb; }
+        body { font-family: -apple-system, sans-serif; background: #f8fafc; margin: 0; padding-bottom: 80px; }
+        .p-4 { padding: 16px; }
+        .card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 12px; }
+        .flex { display: flex; align-items: center; justify-content: space-between; }
+        .btn { border: none; padding: 10px 20px; border-radius: 10px; font-weight: bold; cursor: pointer; color: white; }
+        .btn-blue { background: #2563eb; }
+        .btn-red { background: #ef4444; }
+        .btn-gray { background: #cbd5e1; color: #64748b; }
+        .hidden { display: none; }
+        .nav { position: fixed; bottom: 0; left: 0; right: 0; background: white; display: flex; border-top: 1px solid #e2e8f0; }
+        .nav-btn { flex: 1; padding: 15px; text-align: center; font-size: 12px; font-weight: bold; color: #64748b; text-decoration: none; cursor: pointer; }
+        .active { color: #2563eb; border-top: 2px solid #2563eb; }
+        .title { font-size: 24px; font-weight: 800; text-align: center; color: #1e293b; margin: 0; }
     </style>
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
-<body class="bg-slate-50 min-h-screen pb-24">
+<body>
 
-    <header class="bg-white shadow-sm sticky top-0 z-40 p-4 border-b">
-        <h1 id="headerTitle" class="text-lg font-bold text-slate-800 text-center">排班系統</h1>
-    </header>
-
-    <main id="page-apply" class="p-4 page-transition">
-        <div class="bg-blue-600 rounded-2xl shadow-lg p-6 mb-6 text-white text-center">
-            <h2 id="targetMonthLabel" class="text-2xl font-black italic tracking-wider">載入中...</h2>
+    <div class="p-4" id="main-ui">
+        <div class="card" style="background: #2563eb; color: white;">
+            <h1 id="monthLabel" class="title" style="color: white;">載入中...</h1>
         </div>
-        <div id="calendarList" class="space-y-3">
-            <div class="animate-pulse flex space-x-4 p-4 bg-white rounded-xl shadow-sm">
-                <div class="rounded-full bg-slate-200 h-10 w-10"></div>
-                <div class="flex-1 space-y-3 py-1">
-                    <div class="h-2 bg-slate-200 rounded"></div>
-                    <div class="h-2 bg-slate-200 rounded w-5/6"></div>
-                </div>
+
+        <div id="view-apply">
+            <div id="calendarList"></div>
+        </div>
+
+        <div id="view-record" class="hidden">
+            <div class="card">
+                <select id="queryYM" onchange="fetchMyRecords()" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ddd;"></select>
             </div>
+            <div id="myRecordList"></div>
         </div>
-    </main>
+    </div>
 
-    <main id="page-record" class="hidden p-4 page-transition">
-        <div class="bg-white rounded-2xl shadow-md p-6 mb-6 border border-slate-100">
-            <label class="block text-sm font-bold text-slate-500 mb-2">查詢排班</label>
-            <select id="queryYM" onchange="fetchMyRecords()" class="w-full bg-slate-50 border-0 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 font-medium text-slate-700 shadow-inner">
-                </select>
+    <div class="nav">
+        <div class="nav-btn active" id="tab-apply" onclick="showPage('apply')">
+            <div style="font-size: 20px;">📅</div><div>排班登記</div>
         </div>
-        <div id="myRecordList" class="space-y-3">
-            </div>
-    </main>
-
-    <nav class="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-200 flex z-50 shadow-2xl">
-        <button id="tab-apply" onclick="showPage('apply')" class="flex-1 py-4 flex flex-col items-center gap-1 transition-colors">
-            <span class="text-xl">📅</span>
-            <span class="text-[10px] font-bold uppercase tracking-widest">排班登記</span>
-        </button>
-        <button id="tab-record" onclick="showPage('record')" class="flex-1 py-4 flex flex-col items-center gap-1 transition-colors">
-            <span class="text-xl">👤</span>
-            <span class="text-[10px] font-bold uppercase tracking-widest">班表查詢</span>
-        </button>
-    </nav>
+        <div class="nav-btn" id="tab-record" onclick="showPage('record')">
+            <div style="font-size: 20px;">🔍</div><div>班表查詢</div>
+        </div>
+    </div>
 
     <script>
         const GAS_URL = "https://script.google.com/macros/s/AKfycbxdP936FOYc0ccKaj9xUgTk23idCtlQ8gigIB3Ux2ZTR9mNwRx3AEadi0VzVqdMwhSnZQ/exec";
         const LIFF_ID = "2009203505-YoXdzhWv";
-        
-        let user = {};
-        let counts = {}, myDates = [];
-        let tYear, tMonth;
+        let user = {}, counts = {}, myDates = [], tYear, tMonth;
 
         async function init() {
-            try {
-                await liff.init({ liffId: LIFF_ID });
-                if (!liff.isLoggedIn()) { liff.login(); return; }
-                user = await liff.getProfile();
-                
-                // 1. 計算下下個月
-                const d = new Date();
-                const target = new Date(d.getFullYear(), d.getMonth() + 2, 1);
-                tYear = target.getFullYear(); tMonth = target.getMonth() + 1;
-                document.getElementById('targetMonthLabel').innerText = `${tYear}年 ${tMonth}月`;
+            await liff.init({ liffId: LIFF_ID });
+            if (!liff.isLoggedIn()) { liff.login(); return; }
+            user = await liff.getProfile();
 
-                setupQueryOptions();
-                await refresh(); 
+            const d = new Date();
+            const target = new Date(d.getFullYear(), d.getMonth() + 2, 1);
+            tYear = target.getFullYear(); tMonth = target.getMonth() + 1;
+            document.getElementById('monthLabel').innerText = tYear + "年 " + tMonth + "月 排班登記";
 
-                // 2. 路由判斷：檢查 URL 參數 ?page=record
-                const urlParams = new URLSearchParams(window.location.search);
-                const pageParam = urlParams.get('page');
-                showPage(pageParam === 'record' ? 'record' : 'apply');
+            setupOptions();
+            await refresh();
 
-            } catch (err) { alert("LIFF 初始化失敗"); }
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('page') === 'record') showPage('record');
         }
 
-        function setupQueryOptions() {
+        function setupOptions() {
             const sel = document.getElementById('queryYM');
             const now = new Date();
             for(let i=0; i<=2; i++) {
                 let d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-                let val = `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}`;
-                let text = `${d.getFullYear()}年 ${d.getMonth()+1}月`;
-                sel.add(new Option(text, val));
+                let val = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, '0');
+                sel.add(new Option(d.getFullYear() + "年 " + (d.getMonth()+1) + "月", val));
             }
-            sel.selectedIndex = 2; // 預設顯示下下個月選項
+            sel.selectedIndex = 2;
         }
 
         async function refresh() {
-            const res = await fetch(`${GAS_URL}?action=init&lineId=${user.userId}`);
+            const res = await fetch(GAS_URL + "?action=init&lineId=" + user.userId);
             const data = await res.json();
             counts = data.counts; myDates = data.myDates;
-            renderApplyPage();
+            renderCalendar();
         }
 
-        function renderApplyPage() {
+        function renderCalendar() {
             const list = document.getElementById('calendarList');
             list.innerHTML = '';
             const days = new Date(tYear, tMonth, 0).getDate();
-
             for(let i=1; i<=days; i++) {
-                let dateStr = `${tYear}-${tMonth.toString().padStart(2,'0')}-${i.toString().padStart(2,'0')}`;
-                let count = counts[dateStr] || 0;
-                let isMine = myDates.includes(dateStr);
+                let date = tYear + "-" + String(tMonth).padStart(2, '0') + "-" + String(i).padStart(2, '0');
+                let count = counts[date] || 0;
+                let isMine = myDates.includes(date);
                 let isFull = count >= 6;
                 
-                let card = document.createElement('div');
-                card.className = `flex justify-between items-center p-4 bg-white rounded-2xl shadow-sm border transition-all ${isMine ? 'border-blue-500 bg-blue-50' : 'border-slate-100'}`;
-                card.innerHTML = `
-                    <div class="flex flex-col">
-                        <span class="text-lg font-black text-slate-700">${i}日</span>
-                        <span class="text-[10px] font-bold ${isMine?'text-blue-600':(isFull?'text-red-500':'text-slate-400')} uppercase">
-                            ${isMine ? '★ 已登記' : (isFull ? '● 滿額' : '名額: ' + (6-count))}
-                        </span>
-                    </div>
-                    <button onclick="handle('${dateStr}', '${isMine?'cancel':'add'}')" 
-                        ${isFull && !isMine ? 'disabled' : ''}
-                        class="px-6 py-2 rounded-xl font-bold text-sm transition-all shadow-md ${isMine?'bg-red-500 text-white':(isFull?'bg-slate-200 text-slate-400 cursor-not-allowed':'bg-blue-600 text-white')}">
-                        ${isMine ? '取消' : (isFull ? '滿額' : '登記')}
-                    </button>
+                let div = document.createElement('div');
+                div.className = "card flex";
+                div.innerHTML = `
+                    <div><b style="font-size: 18px;">${i}日</b><br><small style="color:${isMine?'#2563eb':(isFull?'#ef4444':'#64748b')}">${isMine?'已登記':(isFull?'已滿額':'剩餘 '+(6-count))}</small></div>
+                    <button onclick="handle('${date}', '${isMine?'cancel':'add'}')" class="btn ${isMine?'btn-red':(isFull?'btn-gray':'btn-blue')}" ${isFull && !isMine?'disabled':''}>${isMine?'取消':(isFull?'滿額':'登記')}</button>
                 `;
-                list.appendChild(card);
+                list.appendChild(div);
             }
         }
 
         async function handle(date, act) {
-            const actionText = act === 'add' ? '登記' : '取消';
-            if(!confirm(`確定要${actionText} ${date} 的排班？`)) return;
-
-            try {
-                await fetch(GAS_URL, { 
-                    method: 'POST', 
-                    body: JSON.stringify({ action: act, date, lineId: user.userId, name: user.displayName }) 
-                });
-                await liff.sendMessages([{ type: 'text', text: `${act==='add'?'✅':'❌'} 已${actionText}：${date}` }]);
-                location.reload(); 
-            } catch (e) { alert("連線失敗，請重試"); }
+            if(!confirm("確定要" + (act==='add'?'登記':'取消') + " " + date + "?")) return;
+            await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: act, date: date, lineId: user.userId, name: user.displayName }) });
+            await liff.sendMessages([{ type: 'text', text: (act==='add'?'✅':'❌') + " 已完成" + (act==='add'?'登記':'取消') + "：" + date }]);
+            location.reload();
         }
 
         function showPage(p) {
-            document.getElementById('page-apply').classList.toggle('hidden', p!=='apply');
-            document.getElementById('page-record').classList.toggle('hidden', p!=='record');
-            
-            // UI 反饋
-            document.getElementById('tab-apply').classList.toggle('active-tab', p==='apply');
-            document.getElementById('tab-record').classList.toggle('active-tab', p==='record');
-            document.getElementById('headerTitle').innerText = p==='apply' ? '排班登記' : '班表查詢';
-
+            document.getElementById('view-apply').classList.toggle('hidden', p!=='apply');
+            document.getElementById('view-record').classList.toggle('hidden', p!=='record');
+            document.getElementById('tab-apply').classList.toggle('active', p==='apply');
+            document.getElementById('tab-record').classList.toggle('active', p==='record');
             if(p==='record') fetchMyRecords();
         }
 
         async function fetchMyRecords() {
             const ym = document.getElementById('queryYM').value;
-            const res = await fetch(`${GAS_URL}?action=getMyList&lineId=${user.userId}&ym=${ym}`);
+            const res = await fetch(GAS_URL + "?action=getMyList&lineId=" + user.userId + "&ym=" + ym);
             const list = await res.json();
-            
-            const listEl = document.getElementById('myRecordList');
-            if (list.length === 0) {
-                listEl.innerHTML = `<div class="text-center py-20 text-slate-300 font-bold">目前無排班資料</div>`;
-            } else {
-                listEl.innerHTML = list.map(d => `
-                    <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500 flex justify-between items-center">
-                        <span class="font-bold text-slate-700">${d}</span>
-                        <span class="text-[10px] bg-blue-100 text-blue-600 px-2 py-1 rounded-md font-bold uppercase">Confirmed</span>
-                    </div>
-                `).join('');
-            }
+            document.getElementById('myRecordList').innerHTML = list.length ? list.map(d => `<div class="card" style="border-left: 5px solid #2563eb;"><b>${d}</b></div>`).join('') : '<p style="text-align:center;color:#94a3b8;margin-top:50px;">查無紀錄</p>';
         }
 
         init();
