@@ -181,11 +181,13 @@
             const result = await res.json();
             let msg = `✅ 成功登記：${result.success.length} 天`;
             if (result.full.length > 0) msg += `\n⚠️ 額滿失敗：${result.full.length} 天`;
-            
-            await liff.sendMessages([{
-                type: 'text',
-                text: `📅 排班結果：\n${msg}\n日期：${result.success.join(', ')}`
-            }]);
+
+            if (liff.isApiAvailable('shareTargetPicker')) { 
+                await liff.sendMessages([{
+                    type: 'text',
+                    text: `📅 排班系統報告：\n${msg}`
+                }]);
+            }            
             location.reload(); 
         } catch (e) {
             btn.disabled = false;
@@ -209,7 +211,10 @@
                 method: 'POST', 
                 body: JSON.stringify({ action: 'cancel', date, lineId: user.userId }) 
             });
-            await liff.sendMessages([{ type: 'text', text: `❌ 已取消排班：${date}` }]);
+            
+            if (liff.isApiAvailable('shareTargetPicker')) { 
+                await liff.sendMessages([{ type: 'text', text: `❌ 已取消排班：${date}` }]);
+            }
             location.reload();
         } catch (e) {
             btn.disabled = false;
