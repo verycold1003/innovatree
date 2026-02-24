@@ -1,273 +1,83 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>排班系統</title>
-    <style>
-        :root { --primary: #2563eb; --danger: #ef4444; --slate: #64748b; --weekend: #dc2626; }
-        body { font-family: -apple-system, sans-serif; background: #f8fafc; margin: 0; padding-bottom: 120px; }
-        .p-4 { padding: 16px; }
-        .card { background: white; border-radius: 16px; padding: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 12px; border: 2px solid transparent; }
-        .card.selected { border-color: var(--primary); background: #eff6ff; }
-        .flex { display: flex; align-items: center; justify-content: space-between; }
-        .btn { border: none; padding: 10px 18px; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 14px; color: white; transition: 0.2s; }
-        .btn-blue { background: var(--primary); }
-        .btn-red { background: var(--danger); }
-        .btn-outline { background: white; color: var(--primary); border: 2px solid var(--primary); }
-        .hidden { display: none; }
-        .nav { position: fixed; bottom: 0; left: 0; right: 0; background: white; display: flex; border-top: 1px solid #e2e8f0; padding: 10px 0; z-index: 100; }
-        .nav-btn { flex: 1; text-align: center; font-size: 12px; font-weight: bold; color: var(--slate); border: none; background: none; cursor: pointer; }
-        .nav-btn.active { color: var(--primary); }
-        .batch-bar { position: fixed; bottom: 80px; left: 16px; right: 16px; background: #1e293b; color: white; padding: 16px; border-radius: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 99; }
-        .title-card { background: var(--primary); color: white; border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 20px; }
-        .day-text { font-size: 18px; font-weight: 800; color: #1e293b; }
-        .week-text { font-size: 14px; margin-left: 6px; color: var(--slate); font-weight: 600; }
-        .is-weekend { color: var(--weekend) !important; }
-        .loading-spinner { text-align: center; padding: 50px; color: var(--slate); font-weight: bold; }
-        /* 提示字過渡 */
-        #statusHint { transition: opacity 0.5s ease; }
-    </style>
-    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-</head>
-<body>
+const SPREADSHEET_ID = '1Y5BnieJBMR1TYfQFU-7BU267984a_tOS8J765cHe_sw';
 
-<div class="p-4">
-    <div id="view-apply">
-        <div class="title-card">
-            <h1 id="monthLabel" style="margin:0; font-size:22px;">載入中...</h1>
-            <small id="statusHint">正在檢查名額...</small>
-        </div>
-        <div id="calendarList"></div>
-        <div id="batchBar" class="batch-bar hidden">
-            <div>已選 <span id="selectedCount" style="color:#60a5fa; font-weight:bold; font-size:18px;">0</span> 天</div>
-            <button id="batchSubmitBtn" onclick="submitBatch()" class="btn btn-blue" style="background:#3b82f6;">確認登記</button>
-        </div>
-    </div>
+function doGet(e) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('Shifts') || ss.insertSheet('Shifts');
+  const data = sheet.getDataRange().getValues();
+  const action = e.parameter.action;
+  const lineId = e.parameter.lineId;
+  const ym = e.parameter.ym ? e.parameter.ym.replace(/-/g, '/') : ""; // 確保 ym 也是斜線格式
+  let counts = {};
+  let myDates = [];
 
-    <div id="view-record" class="hidden">
-        <div class="card">
-            <h2 style="margin-top:0; font-size:18px;">班表查詢</h2>
-            <select id="queryYM" onchange="fetchMyRecords()" style="width:100%; padding:10px; border-radius:8px; border:1px solid #ddd;"></select>
-        </div>
-        <div id="myRecordList"></div>
-    </div>
-</div>
-
-<div class="nav">
-    <button class="nav-btn active" id="tab-apply" onclick="showPage('apply')"><div>📅</div><div>排班登記</div></button>
-    <button class="nav-btn" id="tab-record" onclick="showPage('record')"><div>🔍</div><div>班表查詢</div></button>
-</div>
-
-<script>
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbxdP936FOYc0ccKaj9xUgTk23idCtlQ8gigIB3Ux2ZTR9mNwRx3AEadi0VzVqdMwhSnZQ/exec";
-    const LIFF_ID = "2009203505-YoXdzhWv";
-    let user = {}, counts = {}, myDates = [], selectedDates = [], tYear, tMonth;
-    const weekMap = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
-
-    async function init() {
-        await liff.init({ liffId: LIFF_ID });
-        if (!liff.isLoggedIn()) { liff.login(); return; }
-        user = await liff.getProfile();
-
-        const d = new Date();
-        const target = new Date(d.getFullYear(), d.getMonth() + 2, 1);
-        tYear = target.getFullYear(); tMonth = target.getMonth() + 1;
-        document.getElementById('monthLabel').innerText = `${tYear}年 ${tMonth}月 排班`;
-
-        setupOptions();
-        await refreshData();
-        
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('page') === 'record') showPage('record');
+  for (let i = 1; i < data.length; i++) {
+    const rowDate = data[i][0];
+    if (!(rowDate instanceof Date)) continue;
+    const dStr = Utilities.formatDate(new Date(rowDate), "GMT+8", "yyyy/MM/dd");
+    if (dStr.startsWith(ym)) {
+      counts[dStr] = (counts[dStr] || 0) + 1;
+      if (data[i][2] === lineId) myDates.push(dStr);
     }
+  }
+  return response({ counts, myDates });
+}
 
-    function setupOptions() {
-        const sel = document.getElementById('queryYM');
-        const now = new Date();
-        for(let i=0; i<=2; i++) {
-            let d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-            let val = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0');
-            sel.add(new Option(`${d.getFullYear()}年 ${d.getMonth()+1}月`, val));
-        }
-        sel.selectedIndex = 2;
-    }
-
-    async function refreshData() {
-        const hint = document.getElementById('statusHint');
-        try {
-            const res = await fetch(`${GAS_URL}?action=init&lineId=${user.userId}`);
-            const data = await res.json();
-            counts = data.counts; 
-            myDates = data.myDates;
-            renderCalendar();
-            
-            hint.style.opacity = "0";
-            setTimeout(() => { 
-                hint.style.display = "none"; 
-            }, 500);
-        } catch (e) {
-            // hint.innerText = "資料載入失敗，請稍後再試";
-        }
-    }
-
-    function renderCalendar() {
-        const list = document.getElementById('calendarList');
-        list.innerHTML = '';
-        const days = new Date(tYear, tMonth, 0).getDate();
-
-        for(let i=1; i<=days; i++) {
-            let date = `${tYear}-${String(tMonth).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
-            let count = counts[date] || 0;
-            let isMine = myDates.includes(date);
-            let isFull = count >= 6;
-            let isSelected = selectedDates.includes(date);
-
-            const d = new Date(tYear, tMonth - 1, i);
-            const weekDay = weekMap[d.getDay()];
-            const isWeekend = (d.getDay() === 0 || d.getDay() === 6);
-
-            const card = document.createElement('div');
-            card.className = `card flex ${isSelected ? 'selected' : ''}`;
-            
-            let btnAction = isMine ? `cancelSingle(event, '${date}')` : `toggleSelect('${date}')`;
-            let btnText = isMine ? '取消預約' : (isSelected ? '取消選取' : (isFull ? '已滿額' : '選取'));
-            let btnClass = isMine ? 'btn-red' : (isSelected ? 'btn-outline' : 'btn-blue');
-
-            card.innerHTML = `
-                <div>
-                    <div>
-                        <span class="day-text">${i}日</span>
-                        <span class="week-text ${isWeekend ? 'is-weekend' : ''}">${weekDay}</span>
-                    </div>
-                    <div style="font-size:12px; font-weight:600; color:${isMine?'#2563eb':(isFull?'#ef4444':'#94a3b8')}">
-                        ${isMine ? '● 已排班' : (isFull ? '● 人數已滿' : `可預約 (剩${6-count})`)}
-                    </div>
-                </div>
-                <button onclick="${btnAction}" class="btn ${btnClass}" ${isFull && !isMine ? 'disabled' : ''}>${btnText}</button>
-            `;
-            list.appendChild(card);
-        }
-    }
-
-    function toggleSelect(date) {
-        const idx = selectedDates.indexOf(date);
-        if (idx > -1) selectedDates.splice(idx, 1);
-        else selectedDates.push(date);
-        const bar = document.getElementById('batchBar');
-        bar.classList.toggle('hidden', selectedDates.length === 0);
-        document.getElementById('selectedCount').innerText = selectedDates.length;
-        renderCalendar();
-    }
-
-    async function submitBatch() {
-        const btn = document.getElementById('batchSubmitBtn');
-        const originalText = btn.innerText;
-        btn.disabled = true;
-        btn.innerText = "處理中...";
-        btn.style.opacity = "0.5";
-        btn.style.cursor = "not-allowed";
-
-        try {
-            const res = await fetch(GAS_URL, {
-                method: 'POST',
-                body: JSON.stringify({ 
-                    action: 'batch_add', 
-                    dates: selectedDates, 
-                    lineId: user.userId, 
-                    name: user.displayName 
-                })
-            });
-            const result = await res.json();
-            let msg = `✅ 成功登記：${result.success.length} 天`;
-            if (result.full.length > 0) msg += `\n⚠️ 額滿失敗：${result.full.length} 天`;
-
-            try {
-                await liff.sendMessages([{
-                    type: 'text',
-                    text: `✅ 成功登記：${result.success.length} 天\n日期：${result.success.join(', ')}`
-                }]);
-            } catch (err) {}          
-            location.reload(); 
-        } catch (e) {
-            btn.disabled = false;
-            btn.innerText = originalText;
-            btn.style.opacity = "1";
-            btn.style.cursor = "pointer";
-            // alert("系統忙碌中，請重新嘗試");
-        }
-    }
-
-    async function cancelSingle(event, date) {
-        const btn = event.currentTarget;
-        const originalText = btn.innerText;
-        btn.disabled = true;
-        btn.innerText = "處理中...";
-        btn.style.opacity = "0.5";
-        btn.style.cursor = "not-allowed";
-
-        try {
-            await fetch(GAS_URL, { 
-                method: 'POST', 
-                body: JSON.stringify({ action: 'cancel', date, lineId: user.userId }) 
-            });
-            
-            try {
-                // 等待發送動作「排隊」完成
-                await liff.sendMessages([{
-                    type: 'text',
-                    text: `❌ 已取消排班：${date}`
-                }]);
-            } catch (err) {
-                console.log("訊息權限授權中或環境不支援");
-            }
-            location.reload();
-        } catch (e) {
-            btn.disabled = false;
-            btn.innerText = originalText;
-            btn.style.opacity = "1";
-            btn.style.cursor = "pointer";
-        }
-    }
+function doPost(e) {
+  const lock = LockService.getScriptLock();
+  try {
+    // 嘗試鎖定，最多等待 10 秒
+    lock.waitLock(10000); 
     
-    function showPage(p) {
-        document.getElementById('view-apply').classList.toggle('hidden', p!=='apply');
-        document.getElementById('view-record').classList.toggle('hidden', p!=='record');
-        document.getElementById('tab-apply').classList.toggle('active', p==='apply');
-        document.getElementById('tab-record').classList.toggle('active', p==='record');
-        if (p !== 'apply') document.getElementById('batchBar').classList.add('hidden');
-        else if (selectedDates.length > 0) document.getElementById('batchBar').classList.remove('hidden');
-        if(p==='record') fetchMyRecords();
-    }
+    const payload = JSON.parse(e.postData.contents);
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName('Shifts');
+    let rows = sheet.getDataRange().getValues();
 
-    async function fetchMyRecords() {
-        const listEl = document.getElementById('myRecordList');
-        listEl.innerHTML = '<div class="loading-spinner">⏳ 正在查詢班表...</div>';
-        const ym = document.getElementById('queryYM').value;
-        try {
-            const res = await fetch(`${GAS_URL}?action=init&lineId=${user.userId}`);
-            const data = await res.json();
-            const ymDates = data.myDates.filter(d => d.startsWith(ym));
-            ymDates.sort((a, b) => new Date(a) - new Date(b));
-            listEl.innerHTML = ymDates.length ? ymDates.map(d => {
-                const dateObj = new Date(d);
-                const w = weekMap[dateObj.getDay()];
-                const isW = (dateObj.getDay() === 0 || dateObj.getDay() === 6);
-                return `
-                    <div class="card flex" style="border-left:5px solid #2563eb;">
-                        <div>
-                            <b>${d}</b>
-                            <small style="margin-left:8px; color:${isW?'#dc2626':'#64748b'}; font-weight:bold;">${w}</small>
-                        </div>
-                    </div>
-                `;
-            }).join('') : '<div style="text-align:center; color:#94a3b8; margin-top:50px;">查無班表</div>';
-        } catch(e) { 
-            listEl.innerHTML = '<div style="text-align:center; color:red; margin-top:50px;">查詢失敗</div>'; 
+    // 批次新增模式
+    if (payload.action === "batch_add") {
+      let success = [], full = [];
+      let dateCounts = {};
+ 
+      rows.forEach(r => {
+        if (r[0] instanceof Date) {
+          let dStr = Utilities.formatDate(r[0], "GMT+8", "yyyy/MM/dd");
+          dateCounts[dStr] = (dateCounts[dStr] || 0) + 1;
         }
+      });
+
+      payload.dates.forEach(date => {
+        let currentCount = dateCounts[date] || 0;
+        if (currentCount < 6) {
+          sheet.appendRow([date, payload.name, payload.lineId, new Date()]);
+          // 重要：同步更新計數地圖，避免同批次內超額
+          dateCounts[date] = currentCount + 1;
+          success.push(date);
+        } else {
+          full.push(date);
+        }
+      });
+      return response({ result: "finished", success, full });
     }
 
-    init();
-</script>
-</body>
-</html>
+    // 取消模式
+    if (payload.action === "cancel") {
+      for (let i = rows.length - 1; i >= 1; i--) {
+        const rowDate = (rows[i][0] instanceof Date) ? 
+                        Utilities.formatDate(rows[i][0], "GMT+8", "yyyy/MM/dd") : 
+                        rows[i][0].toString().replace(/-/g, '/');
+        if (rowDate === payload.date && rows[i][2] === payload.lineId) {
+          sheet.deleteRow(i + 1);
+          return response({ result: "ok" });
+        }
+      }
+      return response({ result: "not_found" });
+    }
+  } catch (err) {
+    return response({ result: "error", msg: "系統忙碌" });
+  } finally {
+    lock.releaseLock();
+  }
+}
+function response(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
