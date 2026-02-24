@@ -15,18 +15,18 @@
         .btn-blue { background: var(--primary); }
         .btn-red { background: var(--danger); }
         .btn-outline { background: white; color: var(--primary); border: 2px solid var(--primary); }
-        .btn-gray { background: #e2e8f0; color: #94a3b8; cursor: not-allowed; }
         .hidden { display: none; }
         .nav { position: fixed; bottom: 0; left: 0; right: 0; background: white; display: flex; border-top: 1px solid #e2e8f0; padding: 10px 0; z-index: 100; }
         .nav-btn { flex: 1; text-align: center; font-size: 12px; font-weight: bold; color: var(--slate); border: none; background: none; cursor: pointer; }
         .nav-btn.active { color: var(--primary); }
         .batch-bar { position: fixed; bottom: 80px; left: 16px; right: 16px; background: #1e293b; color: white; padding: 16px; border-radius: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 99; }
         .title-card { background: var(--primary); color: white; border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 20px; }
-        /* 星期顯示樣式 */
         .day-text { font-size: 18px; font-weight: 800; color: #1e293b; }
         .week-text { font-size: 14px; margin-left: 6px; color: var(--slate); font-weight: 600; }
         .is-weekend { color: var(--weekend) !important; }
         .loading-spinner { text-align: center; padding: 50px; color: var(--slate); font-weight: bold; }
+        /* 提示字過渡 */
+        #statusHint { transition: opacity 0.5s ease; }
     </style>
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
@@ -38,9 +38,7 @@
             <h1 id="monthLabel" style="margin:0; font-size:22px;">載入中...</h1>
             <small id="statusHint">正在檢查名額...</small>
         </div>
-        
         <div id="calendarList"></div>
-
         <div id="batchBar" class="batch-bar hidden">
             <div>已選 <span id="selectedCount" style="color:#60a5fa; font-weight:bold; font-size:18px;">0</span> 天</div>
             <button id="batchSubmitBtn" onclick="submitBatch()" class="btn btn-blue" style="background:#3b82f6;">確認登記</button>
@@ -96,14 +94,21 @@
     }
 
     async function refreshData() {
-        const res = await fetch(`${GAS_URL}?action=init&lineId=${user.userId}`);
-        const data = await res.json();
-        counts = data.counts; myDates = data.myDates;
-        renderCalendar();
-        setTimeout(() => {
-            hint.style.opacity = "0";
-            hint.style.transition = "display: none";
-        }, 2000);
+        const hint = document.getElementById('statusHint');
+        try {
+            const res = await fetch(`${GAS_URL}?action=init&lineId=${user.userId}`);
+            const data = await res.json();
+            counts = data.counts; 
+            myDates = data.myDates;
+            renderCalendar();
+            
+            setTimeout(() => {
+                hint.style.opacity = "0";
+                setTimeout(() => { hint.style.display = "none"; }, 500);
+            }, 2000);
+        } catch (e) {
+            // hint.innerText = "資料載入失敗，請稍後再試";
+        }
     }
 
     function renderCalendar() {
@@ -118,7 +123,6 @@
             let isFull = count >= 6;
             let isSelected = selectedDates.includes(date);
 
-            // 計算星期幾
             const d = new Date(tYear, tMonth - 1, i);
             const weekDay = weekMap[d.getDay()];
             const isWeekend = (d.getDay() === 0 || d.getDay() === 6);
@@ -145,7 +149,7 @@
             list.appendChild(card);
         }
     }
-    
+
     function toggleSelect(date) {
         const idx = selectedDates.indexOf(date);
         if (idx > -1) selectedDates.splice(idx, 1);
@@ -157,16 +161,12 @@
     }
 
     async function submitBatch() {
-        // if (!confirm(`確定要登記這 ${selectedDates.length} 天嗎？`)) return;
-        
         const btn = document.getElementById('batchSubmitBtn');
         const originalText = btn.innerText;
-
-        // --- 1. 進入「處理中」狀態 ---
         btn.disabled = true;
         btn.innerText = "處理中...";
         btn.style.opacity = "0.5";
-        btn.style.cursor = "not-allowed";      // 改變滑鼠指針
+        btn.style.cursor = "not-allowed";
 
         try {
             const res = await fetch(GAS_URL, {
@@ -179,49 +179,45 @@
                 })
             });
             const result = await res.json();
-            
-            // --- 2. 成功傳送 liff.sendMessages ---
             let msg = `✅ 成功登記：${result.success.length} 天`;
             if (result.full.length > 0) msg += `\n⚠️ 額滿失敗：${result.full.length} 天`;
             
             await liff.sendMessages([{
                 type: 'text',
-                text: `📅 排班系統報告：\n${msg}\n日期：${result.success.join(', ')}`
+                text: `📅 排班結果：\n${msg}\n日期：${result.success.join(', ')}`
             }]);
-
-            // alert(msg);
             location.reload(); 
-
         } catch (e) {
-            // --- 3. 錯誤時還原狀態 ---
-            // alert("連線超時或系統忙碌，請重新嘗試");
+            btn.disabled = false;
+            btn.innerText = originalText;
+            btn.style.opacity = "1";
+            btn.style.cursor = "pointer";
+            // alert("系統忙碌中，請重新嘗試");
+        }
+    }
+
+    async function cancelSingle(event, date) {
+        const btn = event.currentTarget;
+        const originalText = btn.innerText;
+        btn.disabled = true;
+        btn.innerText = "處理中...";
+        btn.style.opacity = "0.5";
+        btn.style.cursor = "not-allowed";
+
+        try {
+            await fetch(GAS_URL, { 
+                method: 'POST', 
+                body: JSON.stringify({ action: 'cancel', date, lineId: user.userId }) 
+            });
+            await liff.sendMessages([{ type: 'text', text: `❌ 已取消排班：${date}` }]);
+            location.reload();
+        } catch (e) {
             btn.disabled = false;
             btn.innerText = originalText;
             btn.style.opacity = "1";
             btn.style.cursor = "pointer";
         }
     }
-
-    async function cancelSingle(event, date) {
-        // if (!confirm(`確定要取消 ${date} 的排班？`)) return;
-        const btn = event.currentTarget;
-        const originalText = btn.innerText; // 備份原始文字（登記/取消）
-        btn.disabled = true;
-        btn.innerText = "處理中...";
-        btn.style.opacity = "0.5";
-        btn.style.cursor = "not-allowed";       
-
-        await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'cancel', date, lineId: user.userId }) });
-        await liff.sendMessages([{ type: 'text', text: `❌ 已取消排班：${date}` }]);
-        location.reload();
-    } /*catch (e) {
-        //alert("系統忙碌中，請稍後再試");
-        // 失敗時恢復原狀
-        btn.disabled = false;
-        btn.innerText = originalText;
-        btn.style.opacity = "1";
-        btn.style.cursor = "pointer";
-    } */
     
     function showPage(p) {
         document.getElementById('view-apply').classList.toggle('hidden', p!=='apply');
@@ -255,7 +251,9 @@
                     </div>
                 `;
             }).join('') : '<div style="text-align:center; color:#94a3b8; margin-top:50px;">查無班表</div>';
-        } catch(e) { listEl.innerHTML = '<div style="text-align:center; color:red; margin-top:50px;">查詢失敗</div>'; }
+        } catch(e) { 
+            listEl.innerHTML = '<div style="text-align:center; color:red; margin-top:50px;">查詢失敗</div>'; 
+        }
     }
 
     init();
