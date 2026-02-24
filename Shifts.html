@@ -100,6 +100,10 @@
         const data = await res.json();
         counts = data.counts; myDates = data.myDates;
         renderCalendar();
+        setTimeout(() => {
+            hint.style.opacity = "0";
+            hint.style.transition = "display: none";
+        }, 2000);
     }
 
     function renderCalendar() {
@@ -161,9 +165,8 @@
         // --- 1. 進入「處理中」狀態 ---
         btn.disabled = true;
         btn.innerText = "處理中...";
-        btn.style.backgroundColor = "#64748b"; // 改為灰色 (Slate)
+        btn.style.opacity = "0.5";
         btn.style.cursor = "not-allowed";      // 改變滑鼠指針
-        btn.style.opacity = "0.7";
 
         try {
             const res = await fetch(GAS_URL, {
@@ -194,19 +197,18 @@
             // alert("連線超時或系統忙碌，請重新嘗試");
             btn.disabled = false;
             btn.innerText = originalText;
-            btn.style.backgroundColor = ""; // 恢復 CSS 原色
-            btn.style.cursor = "pointer";
             btn.style.opacity = "1";
+            btn.style.cursor = "pointer";
         }
     }
 
     async function cancelSingle(event, date) {
         // if (!confirm(`確定要取消 ${date} 的排班？`)) return;
         const btn = event.currentTarget;
+        const originalText = btn.innerText; // 備份原始文字（登記/取消）
         btn.disabled = true;
         btn.innerText = "處理中...";
-        btn.style.backgroundColor = "#e2e8f0"; // 改為灰色
-        btn.style.color = "#94a3b8";
+        btn.style.opacity = "0.5";
         btn.style.cursor = "not-allowed";       
 
         await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'cancel', date, lineId: user.userId }) });
@@ -217,9 +219,10 @@
         // 失敗時恢復原狀
         btn.disabled = false;
         btn.innerText = originalText;
-        btn.style.backgroundColor = ""; // 恢復 CSS 定義的顏色
-        btn.style.color = "";
+        btn.style.opacity = "1";
+        btn.style.cursor = "pointer";
     }
+    
     function showPage(p) {
         document.getElementById('view-apply').classList.toggle('hidden', p!=='apply');
         document.getElementById('view-record').classList.toggle('hidden', p!=='record');
@@ -251,7 +254,7 @@
                         </div>
                     </div>
                 `;
-            }).join('') : '<div style="text-align:center; color:#94a3b8; margin-top:50px;">無登記紀錄</div>';
+            }).join('') : '<div style="text-align:center; color:#94a3b8; margin-top:50px;">查無班表</div>';
         } catch(e) { listEl.innerHTML = '<div style="text-align:center; color:red; margin-top:50px;">查詢失敗</div>'; }
     }
 
