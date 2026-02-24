@@ -70,19 +70,21 @@
         if (!liff.isLoggedIn()) { liff.login(); return; }
         user = await liff.getProfile();
 
+        //初始化
+        const d = new Date();
+        const target = new Date(d.getFullYear(), d.getMonth() + 2, 1);
+        tYear = target.getFullYear(); tMonth = target.getMonth() + 1;
+        document.getElementById('monthLabel').innerText = `${tYear}年 ${tMonth}月 排班`;
+        //2-1.班表查詢下拉年月
+        setupOptions();
+
         //判斷 page 1.排班登記 或 2.班表查詢
         const urlParams = new URLSearchParams(window.location.search);
         //若為 2.班表查詢
         if (urlParams.get('page') === 'record') {
-          //2-1.班表查詢下拉年月
-          setupOptions();
           //2-2.切換到 2.班表查詢
           showPage('record');
         } else { //若為 1.排班登記
-          const d = new Date();
-          const target = new Date(d.getFullYear(), d.getMonth() + 2, 1);
-          tYear = target.getFullYear(); tMonth = target.getMonth() + 1;
-          document.getElementById('monthLabel').innerText = `${tYear}年 ${tMonth}月 排班`;
           //1-1.抓資料表及1-2.依年月顯示每日及星期，是否額滿、是否選取、是否登記
           await refreshData();
         }
