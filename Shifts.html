@@ -15,7 +15,7 @@
         .btn-blue { background: var(--primary); }
         .btn-red { background: var(--danger); }
         .btn-outline { background: white; color: var(--primary); border: 2px solid var(--primary); }
-        .hidden { display: none; }
+        .hidden { display: none!important; }
         .nav { position: fixed; bottom: 0; left: 0; right: 0; background: white; display: flex; border-top: 1px solid #e2e8f0; padding: 10px 0; z-index: 100; }
         .nav-btn { flex: 1; text-align: center; font-size: 12px; font-weight: bold; color: var(--slate); border: none; background: none; cursor: pointer; }
         .nav-btn.active { color: var(--primary); }
@@ -260,15 +260,8 @@
         document.getElementById('view-record').classList.toggle('hidden', p!=='record');
         document.getElementById('tab-apply').classList.toggle('active', p==='apply');
         document.getElementById('tab-record').classList.toggle('active', p==='record');
-        if (p !== 'apply') {
-          document.getElementById('batchBar').classList.add('hidden');
-        } else {
-          if (selectedDates.length > 0) {
-            document.getElementById('batchBar').classList.remove('hidden');
-          } else {
-            document.getElementById('batchBar').classList.add('hidden');
-          }
-        }
+        if (p !== 'apply') document.getElementById('batchBar').classList.add('hidden');
+        else if (selectedDates.length > 0) document.getElementById('batchBar').classList.remove('hidden');
         //若為 2.班表查詢，2-3.依所選下拉年月顯示班表
         if(p==='record') fetchMyRecords();
     }
