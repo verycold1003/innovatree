@@ -154,30 +154,72 @@
 
     async function submitBatch() {
         // if (!confirm(`確定要登記這 ${selectedDates.length} 天嗎？`)) return;
+        
         const btn = document.getElementById('batchSubmitBtn');
-        btn.disabled = true; btn.innerText = "寫入中...";
+        const originalText = btn.innerText;
+
+        // --- 1. 進入「處理中」狀態 ---
+        btn.disabled = true;
+        btn.innerText = "處理中...";
+        btn.style.backgroundColor = "#64748b"; // 改為灰色 (Slate)
+        btn.style.cursor = "not-allowed";      // 改變滑鼠指針
+        btn.style.opacity = "0.7";
+
         try {
             const res = await fetch(GAS_URL, {
                 method: 'POST',
-                body: JSON.stringify({ action: 'batch_add', dates: selectedDates, lineId: user.userId, name: user.displayName })
+                body: JSON.stringify({ 
+                    action: 'batch_add', 
+                    dates: selectedDates, 
+                    lineId: user.userId, 
+                    name: user.displayName 
+                })
             });
             const result = await res.json();
-            // alert(`登記完成！\n成功：${result.success.length} 天\n${result.full.length > 0 ? '額滿失敗：' + result.full.length + ' 天' : ''}`);
-            location.reload();
+            
+            // --- 2. 成功傳送 liff.sendMessages ---
+            let msg = `✅ 成功登記：${result.success.length} 天`;
+            if (result.full.length > 0) msg += `\n⚠️ 額滿失敗：${result.full.length} 天`;
+            
+            await liff.sendMessages([{
+                type: 'text',
+                text: `📅 排班系統報告：\n${msg}\n日期：${result.success.join(', ')}`
+            }]);
+
+            // alert(msg);
+            location.reload(); 
+
         } catch (e) {
-          // alert("系統忙碌");
-          btn.disabled = false;
+            // --- 3. 錯誤時還原狀態 ---
+            // alert("連線超時或系統忙碌，請重新嘗試");
+            btn.disabled = false;
+            btn.innerText = originalText;
+            btn.style.backgroundColor = ""; // 恢復 CSS 原色
+            btn.style.cursor = "pointer";
+            btn.style.opacity = "1";
         }
     }
 
     async function cancelSingle(event, date) {
-        if (!confirm(`確定要取消 ${date} 的排班？`)) return;
+        // if (!confirm(`確定要取消 ${date} 的排班？`)) return;
         const btn = event.currentTarget;
-        btn.disabled = true; btn.innerText = "...";
-        await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'cancel', date, lineId: user.userId }) });
-        location.reload();
-    }
+        btn.disabled = true;
+        btn.innerText = "處理中...";
+        btn.style.backgroundColor = "#e2e8f0"; // 改為灰色
+        btn.style.color = "#94a3b8";
+        btn.style.cursor = "not-allowed";       
 
+        await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'cancel', date, lineId: user.userId }) });
+        await liff.sendMessages([{ type: 'text', text: `❌ 已取消排班：${date}` }]);
+        location.reload();
+    } catch (e) {
+        //alert("系統忙碌中，請稍後再試");
+        // 失敗時恢復原狀
+        btn.disabled = false;
+        btn.innerText = originalText;
+        btn.style.backgroundColor = ""; // 恢復 CSS 定義的顏色
+        btn.style.color = "";
+    }
     function showPage(p) {
         document.getElementById('view-apply').classList.toggle('hidden', p!=='apply');
         document.getElementById('view-record').classList.toggle('hidden', p!=='record');
@@ -207,7 +249,6 @@
                             <b>${d}</b>
                             <small style="margin-left:8px; color:${isW?'#dc2626':'#64748b'}; font-weight:bold;">${w}</small>
                         </div>
-                        <span style="color:#2563eb; font-size:12px;">已確認</span>
                     </div>
                 `;
             }).join('') : '<div style="text-align:center; color:#94a3b8; margin-top:50px;">無登記紀錄</div>';
