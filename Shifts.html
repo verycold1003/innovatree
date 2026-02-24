@@ -102,10 +102,10 @@
             myDates = data.myDates;
             renderCalendar();
             
-            setTimeout(() => {
-                hint.style.opacity = "0";
-                setTimeout(() => { hint.style.display = "none"; }, 500);
-            }, 2000);
+            hint.style.opacity = "0";
+            setTimeout(() => { 
+                hint.style.display = "none"; 
+            }, 500);
         } catch (e) {
             // hint.innerText = "資料載入失敗，請稍後再試";
         }
@@ -182,12 +182,12 @@
             let msg = `✅ 成功登記：${result.success.length} 天`;
             if (result.full.length > 0) msg += `\n⚠️ 額滿失敗：${result.full.length} 天`;
 
-            if (liff.isApiAvailable('shareTargetPicker')) { 
+            try {
                 await liff.sendMessages([{
                     type: 'text',
-                    text: `📅 排班系統報告：\n${msg}`
+                    text: `✅ 成功登記：${result.success.length} 天\n日期：${result.success.join(', ')}`
                 }]);
-            }            
+            } catch (err) {}          
             location.reload(); 
         } catch (e) {
             btn.disabled = false;
@@ -212,8 +212,14 @@
                 body: JSON.stringify({ action: 'cancel', date, lineId: user.userId }) 
             });
             
-            if (liff.isApiAvailable('shareTargetPicker')) { 
-                await liff.sendMessages([{ type: 'text', text: `❌ 已取消排班：${date}` }]);
+            try {
+                // 等待發送動作「排隊」完成
+                await liff.sendMessages([{
+                    type: 'text',
+                    text: `❌ 已取消排班：${date}`
+                }]);
+            } catch (err) {
+                console.log("訊息權限授權中或環境不支援");
             }
             location.reload();
         } catch (e) {
