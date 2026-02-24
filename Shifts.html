@@ -39,6 +39,11 @@
             <small id="statusHint">正在檢查名額...</small>
         </div>
         <div id="calendarList"></div>
+
+        <div id="batchBar" class="batch-bar hidden">
+            <div>已選 <span id="selectedCount" style="color:#60a5fa; font-weight:bold; font-size:18px;">0</span> 天</div>
+            <button id="batchSubmitBtn" onclick="submitBatch()" class="btn btn-blue" style="background:#3b82f6;">批次確認登記</button>
+        </div>
     </div>
 
     <div id="view-record" class="hidden">
@@ -47,11 +52,6 @@
         </div>
         <div id="myRecordList"></div>
     </div>
-</div>
-
-<div id="batchBar" class="batch-bar hidden">
-    <div>已選 <span id="selectedCount" style="color:#60a5fa; font-weight:bold; font-size:18px;">0</span> 天</div>
-    <button id="batchSubmitBtn" onclick="submitBatch()" class="btn btn-blue" style="background:#3b82f6;">批次確認登記</button>
 </div>
 
 <div class="nav">
@@ -189,3 +189,4 @@
 </script>
 </body>
 </html>
+
