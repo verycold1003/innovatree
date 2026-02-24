@@ -107,7 +107,6 @@
         const hint = document.getElementById('statusHint'); //正在檢查名額...
         hint.style.display = "block";
         hint.innerText = "正在檢查名額...";
-        hint.style.color = "var(--slate)";
         const ym = `${tYear}/${String(tMonth).padStart(2, '0')}`;
         try {
             //1-1.抓 資料表
@@ -261,8 +260,15 @@
         document.getElementById('view-record').classList.toggle('hidden', p!=='record');
         document.getElementById('tab-apply').classList.toggle('active', p==='apply');
         document.getElementById('tab-record').classList.toggle('active', p==='record');
-        if (p !== 'apply') document.getElementById('batchBar').classList.add('hidden');
-        else if (selectedDates.length > 0) document.getElementById('batchBar').classList.remove('hidden');
+        if (p !== 'apply') {
+          document.getElementById('batchBar').classList.add('hidden');
+        } else {
+          if (selectedDates.length > 0) {
+            document.getElementById('batchBar').classList.remove('hidden');
+          } else {
+            document.getElementById('batchBar').classList.add('hidden');
+          }
+        }
         //若為 2.班表查詢，2-3.依所選下拉年月顯示班表
         if(p==='record') fetchMyRecords();
     }
