@@ -5,28 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>排班系統</title>
     <style>
-        :root { --primary: #2563eb; --danger: #ef4444; --slate: #64748b; --success: #22c55e; }
+        :root { --primary: #2563eb; --danger: #ef4444; --slate: #64748b; --weekend: #dc2626; }
         body { font-family: -apple-system, sans-serif; background: #f8fafc; margin: 0; padding-bottom: 120px; }
         .p-4 { padding: 16px; }
-        /* 卡片設計 */
         .card { background: white; border-radius: 16px; padding: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 12px; border: 2px solid transparent; }
         .card.selected { border-color: var(--primary); background: #eff6ff; }
         .flex { display: flex; align-items: center; justify-content: space-between; }
-        /* 按鈕設計 */
         .btn { border: none; padding: 10px 18px; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 14px; color: white; transition: 0.2s; }
         .btn-blue { background: var(--primary); }
         .btn-red { background: var(--danger); }
         .btn-outline { background: white; color: var(--primary); border: 2px solid var(--primary); }
         .btn-gray { background: #e2e8f0; color: #94a3b8; cursor: not-allowed; }
         .hidden { display: none; }
-        /* 導覽列 */
         .nav { position: fixed; bottom: 0; left: 0; right: 0; background: white; display: flex; border-top: 1px solid #e2e8f0; padding: 10px 0; z-index: 100; }
         .nav-btn { flex: 1; text-align: center; font-size: 12px; font-weight: bold; color: var(--slate); border: none; background: none; cursor: pointer; }
         .nav-btn.active { color: var(--primary); }
-        /* 批次操作列 */
-        .batch-bar { position: fixed; bottom: 80px; left: 16px; right: 16px; background: #1e293b; color: white; padding: 16px; border-radius: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: slideUp 0.3s ease; }
-        @keyframes slideUp { from { transform: translateY(100px); } to { transform: translateY(0); } }
+        .batch-bar { position: fixed; bottom: 80px; left: 16px; right: 16px; background: #1e293b; color: white; padding: 16px; border-radius: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 99; }
         .title-card { background: var(--primary); color: white; border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 20px; }
+        /* 星期顯示樣式 */
+        .day-text { font-size: 18px; font-weight: 800; color: #1e293b; }
+        .week-text { font-size: 14px; margin-left: 6px; color: var(--slate); font-weight: 600; }
+        .is-weekend { color: var(--weekend) !important; }
+        .loading-spinner { text-align: center; padding: 50px; color: var(--slate); font-weight: bold; }
     </style>
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
@@ -38,17 +38,19 @@
             <h1 id="monthLabel" style="margin:0; font-size:22px;">載入中...</h1>
             <small id="statusHint">正在檢查名額...</small>
         </div>
+        
         <div id="calendarList"></div>
 
         <div id="batchBar" class="batch-bar hidden">
             <div>已選 <span id="selectedCount" style="color:#60a5fa; font-weight:bold; font-size:18px;">0</span> 天</div>
-            <button id="batchSubmitBtn" onclick="submitBatch()" class="btn btn-blue" style="background:#3b82f6;">批次確認登記</button>
+            <button id="batchSubmitBtn" onclick="submitBatch()" class="btn btn-blue" style="background:#3b82f6;">確認登記</button>
         </div>
     </div>
 
     <div id="view-record" class="hidden">
         <div class="card">
-            <select id="queryYM" onchange="fetchMyRecords()" style="width:100%; padding:10px; border-radius:8px;"></select>
+            <h2 style="margin-top:0; font-size:18px;">班表查詢</h2>
+            <select id="queryYM" onchange="fetchMyRecords()" style="width:100%; padding:10px; border-radius:8px; border:1px solid #ddd;"></select>
         </div>
         <div id="myRecordList"></div>
     </div>
@@ -63,6 +65,7 @@
     const GAS_URL = "https://script.google.com/macros/s/AKfycbxdP936FOYc0ccKaj9xUgTk23idCtlQ8gigIB3Ux2ZTR9mNwRx3AEadi0VzVqdMwhSnZQ/exec";
     const LIFF_ID = "2009203505-YoXdzhWv";
     let user = {}, counts = {}, myDates = [], selectedDates = [], tYear, tMonth;
+    const weekMap = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
 
     async function init() {
         await liff.init({ liffId: LIFF_ID });
@@ -111,16 +114,24 @@
             let isFull = count >= 6;
             let isSelected = selectedDates.includes(date);
 
+            // 計算星期幾
+            const d = new Date(tYear, tMonth - 1, i);
+            const weekDay = weekMap[d.getDay()];
+            const isWeekend = (d.getDay() === 0 || d.getDay() === 6);
+
             const card = document.createElement('div');
             card.className = `card flex ${isSelected ? 'selected' : ''}`;
             
             let btnAction = isMine ? `cancelSingle(event, '${date}')` : `toggleSelect('${date}')`;
-            let btnText = isMine ? '取消預約' : (isSelected ? '取消勾選' : (isFull ? '已滿額' : '勾選登記'));
+            let btnText = isMine ? '取消預約' : (isSelected ? '取消選取' : (isFull ? '已滿額' : '選取'));
             let btnClass = isMine ? 'btn-red' : (isSelected ? 'btn-outline' : 'btn-blue');
 
             card.innerHTML = `
                 <div>
-                    <div style="font-size:18px; font-weight:800;">${i}日</div>
+                    <div>
+                        <span class="day-text">${i}日</span>
+                        <span class="week-text ${isWeekend ? 'is-weekend' : ''}">${weekDay}</span>
+                    </div>
                     <div style="font-size:12px; font-weight:600; color:${isMine?'#2563eb':(isFull?'#ef4444':'#94a3b8')}">
                         ${isMine ? '● 已排班' : (isFull ? '● 人數已滿' : `可預約 (剩${6-count})`)}
                     </div>
@@ -130,36 +141,33 @@
             list.appendChild(card);
         }
     }
-
+    
     function toggleSelect(date) {
         const idx = selectedDates.indexOf(date);
         if (idx > -1) selectedDates.splice(idx, 1);
         else selectedDates.push(date);
-        
-        document.getElementById('batchBar').classList.toggle('hidden', selectedDates.length === 0);
+        const bar = document.getElementById('batchBar');
+        bar.classList.toggle('hidden', selectedDates.length === 0);
         document.getElementById('selectedCount').innerText = selectedDates.length;
         renderCalendar();
     }
 
     async function submitBatch() {
-        //if (!confirm(`確定要登記這 ${selectedDates.length} 天嗎？`)) return;
+        // if (!confirm(`確定要登記這 ${selectedDates.length} 天嗎？`)) return;
         const btn = document.getElementById('batchSubmitBtn');
-        btn.disabled = true; btn.innerText = "正在排隊寫入...";
-
+        btn.disabled = true; btn.innerText = "寫入中...";
         try {
             const res = await fetch(GAS_URL, {
                 method: 'POST',
                 body: JSON.stringify({ action: 'batch_add', dates: selectedDates, lineId: user.userId, name: user.displayName })
             });
             const result = await res.json();
-            
-            let msg = `成功：${result.success.length} 天`;
-            if (result.full.length > 0) msg += `\n失敗(名額剛好滿了)：${result.full.length} 天`;
-            alert(msg);
-            
-            await liff.sendMessages([{ type: 'text', text: `📅 排班結果回報：\n${msg}` }]);
+            // alert(`登記完成！\n成功：${result.success.length} 天\n${result.full.length > 0 ? '額滿失敗：' + result.full.length + ' 天' : ''}`);
             location.reload();
-        } catch (e) { alert("連線超時"); btn.disabled = false; }
+        } catch (e) {
+          // alert("系統忙碌");
+          btn.disabled = false;
+        }
     }
 
     async function cancelSingle(event, date) {
@@ -175,18 +183,38 @@
         document.getElementById('view-record').classList.toggle('hidden', p!=='record');
         document.getElementById('tab-apply').classList.toggle('active', p==='apply');
         document.getElementById('tab-record').classList.toggle('active', p==='record');
+        if (p !== 'apply') document.getElementById('batchBar').classList.add('hidden');
+        else if (selectedDates.length > 0) document.getElementById('batchBar').classList.remove('hidden');
         if(p==='record') fetchMyRecords();
     }
 
     async function fetchMyRecords() {
+        const listEl = document.getElementById('myRecordList');
+        listEl.innerHTML = '<div class="loading-spinner">⏳ 正在查詢班表...</div>';
         const ym = document.getElementById('queryYM').value;
-        const res = await fetch(`${GAS_URL}?action=getMyList&lineId=${user.userId}&ym=${ym}`);
-        const list = await res.json();
-        document.getElementById('myRecordList').innerHTML = list.length ? list.map(d => `<div class="card flex" style="border-left:5px solid #2563eb;"><b>${d}</b><span style="color:#2563eb; font-size:12px;">已確認</span></div>`).join('') : '<p style="text-align:center; color:#94a3b8; margin-top:50px;">查無本月班表</p>';
+        try {
+            const res = await fetch(`${GAS_URL}?action=init&lineId=${user.userId}`);
+            const data = await res.json();
+            const ymDates = data.myDates.filter(d => d.startsWith(ym));
+            
+            listEl.innerHTML = ymDates.length ? ymDates.map(d => {
+                const dateObj = new Date(d);
+                const w = weekMap[dateObj.getDay()];
+                const isW = (dateObj.getDay() === 0 || dateObj.getDay() === 6);
+                return `
+                    <div class="card flex" style="border-left:5px solid #2563eb;">
+                        <div>
+                            <b>${d}</b>
+                            <small style="margin-left:8px; color:${isW?'#dc2626':'#64748b'}; font-weight:bold;">${w}</small>
+                        </div>
+                        <span style="color:#2563eb; font-size:12px;">已確認</span>
+                    </div>
+                `;
+            }).join('') : '<div style="text-align:center; color:#94a3b8; margin-top:50px;">無登記紀錄</div>';
+        } catch(e) { listEl.innerHTML = '<div style="text-align:center; color:red; margin-top:50px;">查詢失敗</div>'; }
     }
 
     init();
 </script>
 </body>
 </html>
-
