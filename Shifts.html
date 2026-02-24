@@ -248,7 +248,7 @@
             const res = await fetch(`${GAS_URL}?action=init&lineId=${user.userId}`);
             const data = await res.json();
             const ymDates = data.myDates.filter(d => d.startsWith(ym));
-            
+            ymDates.sort((a, b) => new Date(a) - new Date(b));
             listEl.innerHTML = ymDates.length ? ymDates.map(d => {
                 const dateObj = new Date(d);
                 const w = weekMap[dateObj.getDay()];
