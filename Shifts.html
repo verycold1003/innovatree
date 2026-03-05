@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>排班系統</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
@@ -58,13 +58,14 @@
     <div class="container">
         <h3 id="monthLabel" style="margin:0; text-align:center; color: var(--primary);"></h3>
         <p id="statusHint" style="font-size:12px; text-align:center; color:var(--gray);"></p>
+        <p id="holidayHint" style="text-align:center; font-size:14px; color:var(--primary); font-weight:bold;"></p>
         <div id="calendarList" class="calendar-list"></div>
     </div>
     
     <div id="batchBar" class="hidden" style="position:fixed; bottom:60px; left:0; width:100%; background:rgba(0,0,0,0.85); color:white; padding:12px; text-align:center; display:flex; justify-content:space-around; align-items:center;">
       <span id="selectedCount"></span>
       <button class="btn btn-blue" onclick="submitBatch()">確認提交登記</button>
-    </div>
+</div>
   </div>
 
   <!-- 3.班表查詢 -->
@@ -88,6 +89,7 @@
   
   let userProfile, userRole, userName, userShift;
   let tYear, tMonth, holidayList = [], counts = {}, myDates = [], selectedDates = [];
+  let myHolidayCount = 0;
   const weekMap = ['日', '一', '二', '三', '四', '五', '六'];
 
   // 0. 初始化
@@ -154,6 +156,7 @@
       counts = data.counts;
       myDates = data.myDates;
       holidayList = data.holidayList;
+      myHolidayCount = data.myHolidayCount || 0;
 
       renderCalendar();
       hint.innerText = "✅ 名額已更新";
@@ -165,63 +168,70 @@
   function renderCalendar() {
     const list = document.getElementById('calendarList');
     list.innerHTML = '';
-    const daysInMonth = new Date(tYear, tMonth, 0).getDate();
+    
+    // 更新假日額度提示
+    const currentTotal = myHolidayCount + getSelectedHolidayCount();
+    document.getElementById('holidayHint').innerText = `假日登記額度：${currentTotal} / 5 天`;
 
+    const daysInMonth = new Date(tYear, tMonth, 0).getDate();
     for(let i=1; i<=daysInMonth; i++) {
         let dStr = `${tYear}/${String(tMonth).padStart(2,'0')}/${String(i).padStart(2,'0')}`;
-        if (!counts.hasOwnProperty(dStr)) continue; // 只顯示工作日
-
-        const currentCount = counts[dStr] || 0;
-        const remains = 6 - currentCount;
+        const remains = 6 - (counts[dStr] || 0);
         const isMine = myDates.includes(dStr);
-        const isFull = remains <= 0;
         const isSelected = selectedDates.includes(dStr);
-        
         const dObj = new Date(tYear, tMonth - 1, i);
-        const dayOfWeek = dObj.getDay();
-        const isRed = (dayOfWeek === 0 || dayOfWeek === 6 || holidayList.includes(dStr));
+        const isRed = (dObj.getDay() === 0 || dObj.getDay() === 6 || holidayList.includes(dStr));
 
         const card = document.createElement('div');
         card.className = `card ${isMine ? 'mine' : ''} ${isSelected ? 'selected' : ''}`;
-
         card.innerHTML = `
             <div class="date-info">
                 <span class="day-text">${i}</span>
-                <span class="week-text ${isRed ? 'is-weekend' : ''}">週${weekMap[dayOfWeek]}</span>
+                <span class="week-text ${isRed ? 'is-weekend' : ''}">週${weekMap[dObj.getDay()]}</span>
             </div>
             <div style="flex:1; margin-left:15px; font-size:13px;">
-                ${isMine ? '<b style="color:var(--success)">● 您已登記</b>' : (isFull ? '<span style="color:var(--danger)">❌ 已額滿</span>' : `剩餘 ${remains} 名額`)}
+                ${isMine ? '<b style="color:var(--success)">● 已登記</b>' : (remains <= 0 ? '<span style="color:var(--danger)">❌ 已額滿</span>' : `剩 ${remains} 名額`)}
             </div>
             <div>
-                ${isMine 
-                  ? `<button class="btn btn-red" onclick="cancelDate('${dStr}')">取消</button>`
-                  : `<button class="btn ${isSelected?'btn-outline':'btn-blue'}" 
-                             onclick="toggleSelect('${dStr}')" 
-                             ${isFull && !isSelected ? 'disabled' : ''}>
-                             ${isSelected?'取消選取':'選取'}
-                    </button>`
-                }
-            </div>
-        `;
+                ${isMine ? `<button class="btn btn-red" onclick="cancelDate('${dStr}')">取消</button>` : 
+                `<button class="btn ${isSelected?'btn-outline':'btn-blue'}" onclick="toggleSelect('${dStr}')" ${(remains<=0 && !isSelected)?'disabled':''}>${isSelected?'取消選取':'選取'}</button>`}
+            </div>`;
         list.appendChild(card);
     }
   }
-
+  
+  function getSelectedHolidayCount() {
+    let count = 0;
+    selectedDates.forEach(dStr => {
+      if (checkIsHoliday(dStr)) count++;
+    });
+    return count;
+  }
+  
   function toggleSelect(dStr) {
     const idx = selectedDates.indexOf(dStr);
-    if (idx > -1) selectedDates.splice(idx, 1);
-    else selectedDates.push(dStr);
-
+    if (idx > -1) {
+      selectedDates.splice(idx, 1);
+    } else {
+      if (checkIsHoliday(dStr) && (myHolidayCount + getSelectedHolidayCount() >= 5)) {
+        alert("⚠️ 假日登記已達 5 天上限"); return;
+      }
+      selectedDates.push(dStr);
+    }
+    updateBatchBar();
+    renderCalendar();
+  }
+  
+  function updateBatchBar() {
     const bar = document.getElementById('batchBar');
     if (selectedDates.length > 0) {
       bar.classList.remove('hidden');
-      document.getElementById('selectedCount').innerText = `已選擇 ${selectedDates.length} 天`;
+      document.getElementById('selectedCount').innerText = `已選取 ${selectedDates.length} 天`;
     } else {
       bar.classList.add('hidden');
     }
-    renderCalendar();
   }
-
+  
   async function submitBatch() {
     if (!confirm("確定要提交這些日期的排班嗎？")) return;
     const res = await fetch(GAS_URL, {
@@ -251,12 +261,15 @@
     const sel = document.getElementById('queryYM');
     if (sel.options.length > 0) return;
     const now = new Date();
-    for(let i=-1; i<=1; i++) {
+    // 顯示過去 2 個月到未來 1 個月
+    for(let i=-2; i<=1; i++) {
       let d = new Date(now.getFullYear(), now.getMonth() + i, 1);
       let val = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`;
       sel.add(new Option(`${d.getFullYear()}年 ${d.getMonth()+1}月`, val));
     }
-    sel.value = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;
+    // 預設選中本月
+    const currentYM = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;
+    sel.value = currentYM;
   }
 
   async function fetchAllShifts() {
@@ -264,23 +277,32 @@
     const res = await fetch(`${GAS_URL}?action=get_all_shifts&lineId=${userProfile.userId}&ym=${ym}`);
     const data = await res.json();
     
-    // 管理員可切換月份，員工鎖定顯示內容
-    document.getElementById('queryYM').style.display = (data.role === 'admin' ? 'block' : 'none');
-    document.getElementById('queryTitle').innerText = (data.role === 'admin' ? '全部班表' : '班表查詢');
+    // 現在不論身分都顯示下拉選單
+    document.getElementById('queryYM').style.display = 'block';
+    document.getElementById('queryTitle').innerText = (data.role === 'admin' ? '全體班表總覽' : '我的排班查詢');
 
+    renderShiftTable(data.allShifts, data.role);
+  }
+  
+  function renderShiftTable(data, role) {
     const tbody = document.getElementById('shiftTableBody');
-    tbody.innerHTML = data.allShifts.length ? '' : '<tr><td colspan="3">尚無資料</td></tr>';
+    tbody.innerHTML = '';
     
-    // 簡單排序日期
-    data.allShifts.sort((a,b) => a.date.localeCompare(b.date));
-    
-    data.allShifts.forEach(item => {
+    // 本月統計
+    const statsContainer = document.getElementById('queryStats') || document.createElement('div');
+    statsContainer.id = 'queryStats';
+    statsContainer.style = "padding:10px; color:var(--primary); font-weight:bold; text-align:center;";
+    statsContainer.innerText = `本月統計：共 ${data.length} 天`;
+    document.getElementById('queryPage').insertBefore(statsContainer, document.querySelector('table'));
+
+    if (data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3">尚無排班紀錄</td></tr>';
+      return;
+    }
+    data.sort((a,b) => a.date.localeCompare(b.date));
+    data.forEach(item => {
       const row = document.createElement('tr');
-      row.innerHTML = `
-        <td>${item.date.split('/')[2]}日</td>
-        <td>${item.shift === '白班' ? item.name : ''}</td>
-        <td>${item.shift === '晚班' ? item.name : ''}</td>
-      `;
+      row.innerHTML = `<td>${item.date.split('/')[2]}日</td><td>${item.shift==='白班'?item.name:'-'}</td><td>${item.shift==='晚班'?item.name:'-'}</td>`;
       tbody.appendChild(row);
     });
   }
@@ -309,6 +331,14 @@
     } else {
       alert(result.message);
     }
+  }
+  
+  // 判斷是否為假日
+  function checkIsHoliday(dStr) {
+    const dObj = new Date(dStr);
+    const day = dObj.getDay();
+    // 週末或是在後端回傳的 holidayList 中
+    return (day === 0 || day === 6 || holidayList.includes(dStr));
   }
 
   init();
