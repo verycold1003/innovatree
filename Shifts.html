@@ -6,44 +6,56 @@
   <title>排班系統</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
-    :root { --primary: #007bff; --success: #28a745; --danger: #dc3545; --gray: #6c757d; }
-    body { font-family: -apple-system, sans-serif; margin: 0; padding: 15px; padding-bottom: 80px; background: #f8f9fa; }
-    .container { background: white; border-radius: 12px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-    .hidden { display: none; }
+    :root { --primary: #007bff; --success: #28a745; --danger: #dc3545; --bg: #f8f9fa; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); margin: 0; padding-bottom: 80px; }
+    .container { padding: 15px; }
+    .hidden { display: none !important; }
+    /* 登記卡片 */
+    .card { background: white; border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .card.selected { border: 2px solid var(--primary); background: #e7f3ff; }
+    .card.mine { border-left: 5px solid var(--success); }
+    .card.selected button {
+      background-color: var(--primary);
+      color: white;
+      border: none;
+    }
+    /* 當按鈕被禁用時的樣式 */
+    button:disabled {
+      background-color: #ccc !important;
+      color: #666 !important;
+      cursor: not-allowed;
+    }
+
+    /* 文字樣式 */
+    .is-weekend { color: var(--danger); font-weight: bold; }
+    .date-label { width: 60px; font-size: 1.1em; }
+    
+    /* 批次工具列 */
+    #batchBar {
+      position: fixed; bottom: 65px; left: 0; width: 100%;
+      background: rgba(0,0,0,0.85); color: white;
+      padding: 12px 20px; display: flex; justify-content: space-between; align-items: center;
+      box-sizing: border-box; z-index: 100;
+    }
     
     /* 導覽列 */
-    nav { position: fixed; bottom: 0; left: 0; width: 100%; display: flex; background: white; border-top: 1px solid #ddd; z-index: 100; }
-    nav button { flex: 1; padding: 15px; border: none; background: none; font-size: 14px; color: var(--gray); }
+    nav {
+      position: fixed; bottom: 0; left: 0; width: 100%; height: 60px;
+      background: white; display: flex; border-top: 1px solid #ddd; z-index: 101;
+    }
+    nav button { flex: 1; border: none; background: none; font-size: 16px; color: #555; }
     nav button.active { color: var(--primary); font-weight: bold; }
 
-    /* 日曆卡片 */
-    .calendar-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
-    .card { display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid #eee; border-radius: 8px; }
-    .card.selected { border-color: var(--primary); background: #e7f1ff; }
-    .card.mine { border-left: 5px solid var(--success); background: #f0fff4; }
-    
-    .date-info { display: flex; flex-direction: column; width: 60px; }
-    .day-text { font-size: 18px; font-weight: bold; }
-    .week-text { font-size: 12px; color: var(--gray); }
-    .is-weekend { color: var(--danger); }
-
-    /* 按鈕風格 */
-    .btn { padding: 8px 15px; border-radius: 6px; border: none; font-size: 13px; cursor: pointer; }
-    .btn-blue { background: var(--primary); color: white; }
-    .btn-red { background: var(--danger); color: white; }
-    .btn-outline { border: 1px solid var(--primary); color: var(--primary); background: white; }
-    
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { border: 1px solid #eee; padding: 10px; text-align: center; font-size: 13px; }
-    th { background: #f1f1f1; }
+    /* 表格樣式 (查詢頁面用) */
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+    th { background: #eee; }  
   </style>
 </head>
 <body>
-  <div id="loading" style="text-align:center; margin-top:50px;">系統初始化中...</div>
-
+  <div id="loading" style="text-align:center; margin-top:50px;">⏳ 請稍候...</div>
   <!-- 1.基本設定 -->
   <div id="settingPage" class="container hidden">
-    <h2>👋 初次見面</h2>
     <p>請設定您的姓名與班別</p>
     <input type="text" id="inputName" placeholder="請輸入姓名" style="width:90%; padding:10px; margin-bottom:15px;">
     <div style="margin-bottom:20px;">
@@ -54,260 +66,305 @@
   </div>
 
   <!-- 2.排班登記 -->
-  <div id="applyPage" class="hidden">
-    <div class="container">
-        <h3 id="monthLabel" style="margin:0; text-align:center; color: var(--primary);"></h3>
-        <p id="statusHint" style="font-size:12px; text-align:center; color:var(--gray);"></p>
-        <p id="holidayHint" style="text-align:center; font-size:14px; color:var(--primary); font-weight:bold;"></p>
-        <div id="calendarList" class="calendar-list"></div>
-    </div>
-    
-    <div id="batchBar" class="hidden" style="position:fixed; bottom:60px; left:0; width:100%; background:rgba(0,0,0,0.85); color:white; padding:12px; text-align:center; display:flex; justify-content:space-around; align-items:center;">
-      <span id="selectedCount"></span>
-      <button class="btn btn-blue" onclick="submitBatch()">確認提交登記</button>
-</div>
+  <div id="applyPage" class="container">
+    <h3 id="applyYMTitle">載入中...</h3>
+    <div id="calendarList"></div>
   </div>
 
   <!-- 3.班表查詢 -->
   <div id="queryPage" class="container hidden">
-    <h3 id="queryTitle">班表查詢</h3>
-    <select id="queryYM" onchange="fetchAllShifts()" style="width:100%; padding:10px; margin-bottom:15px; border-radius:6px;"></select>
-    <table>
-      <thead><tr><th>日期</th><th>白班</th><th>晚班</th></tr></thead>
-      <tbody id="shiftTableBody"></tbody>
-    </table>
+    <h3>班表查詢</h3>
+    <select id="queryYM" onchange="switchQueryTab()" style="width:100%; padding:10px; margin-bottom:15px; border-radius:6px; border:1px solid #ccc;"></select>
+    <div id="qTabContent">
+      <div id="qTab-0" class="q-month-tab"></div>
+      <div id="qTab-1" class="q-month-tab"></div>
+      <div id="qTab-2" class="q-month-tab"></div>
+    </div>
   </div>
 
-  <nav id="mainNav" class="hidden">
-    <button id="btn-apply" onclick="showPage('apply')">📅 排班登記</button>
-    <button id="btn-query" onclick="showPage('query')">🔍 班表查詢</button>
-  </nav>
+  <div id="batchBar" class="hidden">
+    <span>已選 <b id="selectedCount">0</b> 天</span>
+    <button id="submitBtn" onclick="submitBatch()" style="background:var(--success); color:white; border:none; padding:10px 20px; border-radius:5px;">確認提交</button>
+  </div>
 
+  <nav id="mainNav">
+    <button id="btn-apply" class="active" onclick="changePage('apply')">📅排班登記</button>
+    <button id="btn-query" onclick="changePage('query')">🔍班表查詢</button>
+  </nav>
 <script>
   const LIFF_ID = '2009203505-YoXdzhWv'; 
   const GAS_URL = 'https://script.google.com/macros/s/AKfycbxdP936FOYc0ccKaj9xUgTk23idCtlQ8gigIB3Ux2ZTR9mNwRx3AEadi0VzVqdMwhSnZQ/exec';
-  
-  let userProfile, userRole, userName, userShift;
-  let tYear, tMonth, holidayList = [], counts = {}, myDates = [], selectedDates = [];
-  let myHolidayCount = 0;
-  const weekMap = ['日', '一', '二', '三', '四', '五', '六'];
+  let fullCache = null; // 儲存 init 的完整資料  
+  let selectedDates = [];
+  let queryMonths = []; // 存儲 YM 字串陣列
 
-  // 0. 初始化
+  // 1-1. 初始化
   async function init() {
-    try {
-      await liff.init({ liffId: LIFF_ID });
-      if (!liff.isLoggedIn()) { liff.login(); return; }
-      userProfile = await liff.getProfile();
+    await liff.init({ liffId: LIFF_ID });
+    if (!liff.isLoggedIn()) { liff.login(); return; }
+    let userProfile = await liff.getProfile();
 
-      // 0-1. 依照 lineId 檢查是否建檔
-      const res = await fetch(`${GAS_URL}?action=get_user&lineId=${userProfile.userId}`);
-      const data = await res.json();
-      
-      if (data.exists) {
-        userName = data.name;
-        userShift = data.shift;
-        userRole = data.role;
-        // 1. 切換到 2.登記排班
-        showPage('apply');
-      } else {
-        document.getElementById('loading').classList.add('hidden');
-        document.getElementById('settingPage').classList.remove('hidden');
-      }
-    } catch (err) {
-      alert("初始化失敗: " + err);
+    // 0-1. 依照 lineId 檢查是否建檔
+    const res = await fetch(`${GAS_URL}?action=get_user&lineId=${userProfile.userId}`);
+    const data = await res.json();
+    
+    if (data.exists) {
+      const initRes = await fetch(`${GAS_URL}?action=init&lineId=${userProfile.userId}`);
+      fullCache = await initRes.json();
+      // 2-1. 班表查詢 初始化
+      renderQuery();
+      // 3-1. 顯示登記排班頁面
+      renderApply();
+      document.getElementById('loading').classList.add('hidden');
+    } else {
+      changePage('setting');
     }
   }
 
-  // 1. 切換到 1.基本設定 或 2.登記排班 或 3.班表查詢
-  async function showPage(p) {
-    document.getElementById('loading').classList.add('hidden');
-    document.getElementById('mainNav').classList.remove('hidden');
-    
-    // UI 切換
-    ['settingPage', 'applyPage', 'queryPage'].forEach(id => document.getElementById(id).classList.add('hidden'));
-    document.getElementById(p + 'Page').classList.remove('hidden');
-    
-    // Tab 高亮
-    document.getElementById('btn-apply').className = (p==='apply'?'active':'');
-    document.getElementById('btn-query').className = (p==='query'?'active':'');
-
-    if (p === 'apply') await refreshApplyData();
-    if (p === 'query') { setupQueryOptions(); await fetchAllShifts(); }
+  // 1-2. 切換 1. 基本設定 或 2. 班表查詢 或 3.排班登記
+  function changePage(p) {
+    document.getElementById('applyPage').classList.toggle('hidden', p !== 'apply');
+    document.getElementById('queryPage').classList.toggle('hidden', p !== 'query');
+    document.getElementById('btn-apply').classList.toggle('active', p === 'apply');
+    document.getElementById('btn-query').classList.toggle('active', p === 'query');
+    document.getElementById('settingPage').classList.toggle('hidden', p !== 'setting');
   }
 
-  // 2. 排班頁面邏輯
-  async function refreshApplyData() {
-    const hint = document.getElementById('statusHint');
-    hint.innerText = "正在同步雲端名額...";
-    
-    try {
-      const res = await fetch(`${GAS_URL}?action=init&lineId=${userProfile.userId}`);
-      const data = await res.json();
-      
-      // 處理伺服器回傳的目標年月
-      const [y, m] = data.serverTime.split(' ')[0].split('/'); // 暫用 serverTime 輔助或從後端直接給 lockYM
-      // 實際上 init 會回傳 counts 的 Key 就是目標年月，我們從中提取
-      const firstDate = Object.keys(data.counts)[0];
-      const dParts = firstDate.split('/');
-      tYear = parseInt(dParts[0]);
-      tMonth = parseInt(dParts[1]);
-
-      document.getElementById('monthLabel').innerText = `${tYear}年 ${tMonth}月 排班登記`;
-      counts = data.counts;
-      myDates = data.myDates;
-      holidayList = data.holidayList;
-      myHolidayCount = data.myHolidayCount || 0;
-
-      renderCalendar();
-      hint.innerText = "✅ 名額已更新";
-    } catch (e) {
-      hint.innerText = "❌ 讀取失敗，請重新整理";
-    }
-  }
-
-  function renderCalendar() {
+  // 3-1. 顯示登記排班頁面
+  function renderApply() {
+    const data = fullCache.applyData;
     const list = document.getElementById('calendarList');
+    const holidayCount = Object.values(data.shifts).filter(s => s.isMine && s.isRed).length;
+    document.getElementById('applyYMTitle').innerHTML = `
+      ${data.ym} 排班登記 
+      <div style="font-size:14px; color:var(--danger); margin-top:5px;">
+        📌 已排假日：${holidayCount} 天
+      </div>
+    `;
     list.innerHTML = '';
-    
-    // 更新假日額度提示
-    const currentTotal = myHolidayCount + getSelectedHolidayCount();
-    document.getElementById('holidayHint').innerText = `假日登記額度：${currentTotal} / 5 天`;
 
-    const daysInMonth = new Date(tYear, tMonth, 0).getDate();
-    for(let i=1; i<=daysInMonth; i++) {
-        let dStr = `${tYear}/${String(tMonth).padStart(2,'0')}/${String(i).padStart(2,'0')}`;
-        const remains = 6 - (counts[dStr] || 0);
-        const isMine = myDates.includes(dStr);
-        const isSelected = selectedDates.includes(dStr);
-        const dObj = new Date(tYear, tMonth - 1, i);
-        const isRed = (dObj.getDay() === 0 || dObj.getDay() === 6 || holidayList.includes(dStr));
-
-        const card = document.createElement('div');
-        card.className = `card ${isMine ? 'mine' : ''} ${isSelected ? 'selected' : ''}`;
-        card.innerHTML = `
-            <div class="date-info">
-                <span class="day-text">${i}</span>
-                <span class="week-text ${isRed ? 'is-weekend' : ''}">週${weekMap[dObj.getDay()]}</span>
-            </div>
-            <div style="flex:1; margin-left:15px; font-size:13px;">
-                ${isMine ? '<b style="color:var(--success)">● 已登記</b>' : (remains <= 0 ? '<span style="color:var(--danger)">❌ 已額滿</span>' : `剩 ${remains} 名額`)}
-            </div>
-            <div>
-                ${isMine ? `<button class="btn btn-red" onclick="cancelDate('${dStr}')">取消</button>` : 
-                `<button class="btn ${isSelected?'btn-outline':'btn-blue'}" onclick="toggleSelect('${dStr}')" ${(remains<=0 && !isSelected)?'disabled':''}>${isSelected?'取消選取':'選取'}</button>`}
-            </div>`;
-        list.appendChild(card);
-    }
-  }
-  
-  function getSelectedHolidayCount() {
-    let count = 0;
-    selectedDates.forEach(dStr => {
-      if (checkIsHoliday(dStr)) count++;
+    Object.keys(data.shifts).sort().forEach(dStr => {
+      // 3-2. 登記排班單日
+      const card = createCardElement(dStr);
+      list.appendChild(card);
     });
-    return count;
   }
-  
+
+  // 3-2. 登記排班單日
+  function createCardElement(dStr) {
+    const s = fullCache.applyData.shifts[dStr];
+    const dayNum = dStr.split('/')[2];
+    const remains = 6 - s.count;
+    const isSelected = selectedDates.includes(dStr);
+
+    const card = document.createElement('div');
+    card.id = `card-${dStr.replace(/\//g, '-')}`; // 設定唯一 ID
+    card.className = `card ${s.isMine ? 'mine' : ''} ${isSelected ? 'selected' : ''}`;
+      
+    card.innerHTML = `
+      <div class="date-label ${s.isRed ? 'is-weekend' : ''}">
+        ${dayNum} (${s.week})
+      </div>
+      <div style="flex:1; text-align:center;">
+        ${s.isMine ? '<b>● 已登記</b>' : (remains <= 0 ? '❌ 額滿' : `剩 ${remains}`)}
+      </div>
+      <button onclick="toggleSelect('${dStr}')">
+        ${s.isMine ? '取消' : (isSelected ? '移除' : '選取')}
+      </button>
+    `;
+    return card;
+  }
+    
+  // 3-3. 排班點選某日
   function toggleSelect(dStr) {
+    const data = fullCache.applyData;
+    const s = data.shifts[dStr];
     const idx = selectedDates.indexOf(dStr);
+    
+    if (idx === -1 && s.isRed) {
+      const registeredHolidays = Object.values(data.shifts).filter(item => item.isMine && item.isRed).length;
+      const selectedHolidays = selectedDates.filter(date => data.shifts[date].isRed).length;
+      if (registeredHolidays + selectedHolidays >= 5) {
+        alert("⚠️ 本月假日登記已達 5 天上限！");
+        return;
+      }
+    }
+    
     if (idx > -1) {
       selectedDates.splice(idx, 1);
     } else {
-      if (checkIsHoliday(dStr) && (myHolidayCount + getSelectedHolidayCount() >= 5)) {
-        alert("⚠️ 假日登記已達 5 天上限"); return;
-      }
       selectedDates.push(dStr);
     }
+    
+    const oldCard = document.getElementById(`card-${dStr.replace(/\//g, '-')}`);
+    // 3-2. 登記排班單日
+    const newCard = createCardElement(dStr);
+    oldCard.parentNode.replaceChild(newCard, oldCard);
+
+    // 3-4. 依selectedDates判斷是否顯示批次登記按鈕
     updateBatchBar();
-    renderCalendar();
-  }
-  
-  function updateBatchBar() {
-    const bar = document.getElementById('batchBar');
-    if (selectedDates.length > 0) {
-      bar.classList.remove('hidden');
-      document.getElementById('selectedCount').innerText = `已選取 ${selectedDates.length} 天`;
-    } else {
-      bar.classList.add('hidden');
-    }
-  }
-  
-  async function submitBatch() {
-    if (!confirm("確定要提交這些日期的排班嗎？")) return;
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'batch_add', lineId: userProfile.userId, dates: selectedDates })
-    });
-    const result = await res.json();
-    if (result.result === 'ok') {
-      alert("登記成功！");
-      selectedDates = [];
-      document.getElementById('batchBar').classList.add('hidden');
-      await refreshApplyData();
-    }
+    
+    updateHolidayHeader(data);
   }
 
+  function updateHolidayHeader(data) {
+    const registered = Object.values(data.shifts).filter(s => s.isMine && s.isRed).length;
+    const selected = selectedDates.filter(date => data.shifts[date].isRed).length;
+    const total = registered + selected;
+    
+    const headerEl = document.getElementById('applyYMTitle');
+    headerEl.innerHTML = `
+      ${data.ym} 排班登記 
+      <div style="font-size:14px; color:${total >= 5 ? 'var(--danger)' : 'var(--success)'}; margin-top:5px;">
+        📌 假日額度：${total} / 5 (已選+已登記)
+      </div>
+    `;
+  }
+  
+  // 3-4. 依selectedDates判斷是否顯示批次登記按鈕
+  function updateBatchBar() {
+    const bar = document.getElementById('batchBar');
+    document.getElementById('selectedCount').innerText = `已選取 ${selectedDates.length} 天`;
+    selectedDates.length > 0 ? bar.classList.remove('hidden') : bar.classList.add('hidden');
+  }
+  
+  // 5-1. 批次提交登記
+  async function submitBatch() {
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.innerText = "提交中...";
+
+    try {
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'batch_add',
+          lineId: liff.getContext().userId,
+          dates: selectedDates
+        })
+      });
+      const result = await res.json();
+      
+      if (result.result === 'ok') {
+        let alertMsg = "";
+        if (result.success.length + result.full.length > 0) {
+          if (result.success.length > 0) alertMsg += `✅ 成功：${result.success.length} 天\n`;
+          if (result.full.length > 0) alertMsg += `⚠️ 額滿：${result.full.join(', ')}\n`;
+          alert(alertMsg);
+          /*await liff.sendMessages([{ 
+              type: 'text', 
+              text: `📅 排班報告：\n${alertMsg}` 
+          }]);*/
+        }
+        // 清空選取
+        selectedDates = [];
+        // 3-4. 依selectedDates判斷是否顯示批次登記按鈕
+        updateBatchBar();
+        // 5-2. 更新伺服器年月+2排班登記
+        await refreshApplyData(); 
+      } else {
+        alert("失敗：" + result.message);
+      }
+    } catch (e) {
+      alert("系統錯誤");
+    }
+    btn.disabled = false;
+    btn.innerText = "確認提交";
+  }
+  
+  // 5-2. 更新伺服器年月+2排班登記
+  async function refreshApplyData() {
+    // 僅抓取排班登記部分的更新
+    const res = await fetch(GAS_URL + "?action=apply&lineId=" + userId);
+    const json = await res.json();
+    fullCache.applyData = json.applyData;
+    // 3-1. 顯示登記排班頁面
+    renderApply(); 
+  }
+
+  // 5-3. 取消登記
   async function cancelDate(dStr) {
     if (!confirm(`確定取消 ${dStr} 的排班？`)) return;
     const res = await fetch(GAS_URL, {
       method: 'POST',
       body: JSON.stringify({ action: 'cancel', lineId: userProfile.userId, date: dStr })
     });
+    // 5-2. 更新伺服器年月+2排班登記
     await refreshApplyData();
   }
 
-  // 2. 查詢頁面邏輯
-  function setupQueryOptions() {
-    const sel = document.getElementById('queryYM');
-    if (sel.options.length > 0) return;
-    const now = new Date();
-    // 顯示過去 2 個月到未來 1 個月
-    for(let i=-2; i<=1; i++) {
-      let d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-      let val = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`;
-      sel.add(new Option(`${d.getFullYear()}年 ${d.getMonth()+1}月`, val));
-    }
-    // 預設選中本月
-    const currentYM = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;
-    sel.value = currentYM;
-  }
+  // 2-1. 班表查詢 初始化
+  function renderQuery() {
+    const data = fullCache.queryData;
+    const select = document.getElementById('queryYM');
+    select.innerHTML = '';
 
-  async function fetchAllShifts() {
-    const ym = document.getElementById('queryYM').value;
-    const res = await fetch(`${GAS_URL}?action=get_all_shifts&lineId=${userProfile.userId}&ym=${ym}`);
-    const data = await res.json();
-    
-    // 現在不論身分都顯示下拉選單
-    document.getElementById('queryYM').style.display = 'block';
-    document.getElementById('queryTitle').innerText = (data.role === 'admin' ? '全體班表總覽' : '我的排班查詢');
+    // 1. 提取月份並填入下拉選單
+    const ymSet = new Set();
+    Object.keys(data).forEach(d => ymSet.add(d.substring(0, 7)));
+    queryMonths = Array.from(ymSet).sort();
 
-    renderShiftTable(data.allShifts, data.role);
+    queryMonths.forEach((ym, idx) => {
+      const opt = document.createElement('option');
+      opt.value = idx;
+      opt.innerText = ym;
+      select.appendChild(opt);
+      
+      // 2-2. 班表查詢 顯示每月的班表
+      renderMonthTable(ym, `qTab-${idx}`, data);
+    });
+
+    // 預設顯示當前月 (通常是中間那個)
+    select.value = 1;
+    // 2-3. 班表查詢 切換年月
+    switchQueryTab();
   }
   
-  function renderShiftTable(data, role) {
-    const tbody = document.getElementById('shiftTableBody');
-    tbody.innerHTML = '';
+  // 2-2. 班表查詢 顯示每月的班表
+  function renderMonthTable(ym, tabId, allData) {
+    const container = document.getElementById(tabId);
+    const dates = Object.keys(allData).filter(d => d.startsWith(ym)).sort();
     
-    // 本月統計
-    const statsContainer = document.getElementById('queryStats') || document.createElement('div');
-    statsContainer.id = 'queryStats';
-    statsContainer.style = "padding:10px; color:var(--primary); font-weight:bold; text-align:center;";
-    statsContainer.innerText = `本月統計：共 ${data.length} 天`;
-    document.getElementById('queryPage').insertBefore(statsContainer, document.querySelector('table'));
-
-    if (data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="3">尚無排班紀錄</td></tr>';
-      return;
-    }
-    data.sort((a,b) => a.date.localeCompare(b.date));
-    data.forEach(item => {
-      const row = document.createElement('tr');
-      row.innerHTML = `<td>${item.date.split('/')[2]}日</td><td>${item.shift==='白班'?item.name:'-'}</td><td>${item.shift==='晚班'?item.name:'-'}</td>`;
-      tbody.appendChild(row);
+    let myCount = 0;
+    dates.forEach(dStr => {
+      if (allData[dStr].dayDetail.some(p => p.name === fullCache.user.name)) {
+        myCount++;
+      }
+    });
+    let html = `
+      <div style="background:#e9ecef; padding:10px; border-radius:5px; margin-bottom:10px; font-weight:bold;">
+        📊 本月總計：${myCount} 天
+      </div>
+      <table>
+        <thead><tr><th>日期</th><th>人員 (${fullCache.user.role === 'admin' ? '全部' : '個人'})</th></tr></thead>
+        <tbody>
+    `;
+    
+    dates.forEach(dStr => {
+      const s = allData[dStr];
+      const day = dStr.split('/')[2];
+      // 後端已抓好所有人名在 dayDetail
+      const names = s.dayDetail.map(p => p.name).join(', ');
+      
+      html += `<tr>
+        <td class="${s.isRed ? 'is-weekend' : ''}">${day} (${s.week})</td>
+        <td>${names || '<span style="color:#ccc">無</span>'}</td>
+      </tr>`;
+    });
+    
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+  }
+  
+  // 2-3. 班表查詢 切換年月
+  function switchQueryTab() {
+    const idx = document.getElementById('queryYM').value;
+    document.querySelectorAll('.q-month-tab').forEach((el, i) => {
+      el.classList.toggle('active', i == idx);
     });
   }
 
-  // 3. 基本設定
+  // 1. 基本設定
   async function saveUser() {
     const name = document.getElementById('inputName').value.trim();
     const shift = document.querySelector('input[name="inputShift"]:checked').value;
@@ -331,14 +388,6 @@
     } else {
       alert(result.message);
     }
-  }
-  
-  // 判斷是否為假日
-  function checkIsHoliday(dStr) {
-    const dObj = new Date(dStr);
-    const day = dObj.getDay();
-    // 週末或是在後端回傳的 holidayList 中
-    return (day === 0 || day === 6 || holidayList.includes(dStr));
   }
 
   init();
