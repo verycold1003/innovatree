@@ -19,6 +19,23 @@
       color: white;
       border: none;
     }
+    /* 按鈕通用樣式 */
+    button { 
+      padding: 8px 15px; 
+      border-radius: 6px; 
+      border: none; 
+      cursor: pointer; 
+      transition: 0.2s;
+    }
+    /* 「選取」按鈕：藍色 */
+    .btn-select { background-color: var(--primary); color: white; }
+
+    /* 「取消/移除」按鈕：灰色或紅色 */
+    .btn-cancel { background-color: #6c757d; color: white; }
+
+    /* 班表查詢：隱藏非選取的月份 */
+    .q-month-tab { display: none; }
+    .q-month-tab.active { display: block; }
     /* 當按鈕被禁用時的樣式 */
     button:disabled {
       background-color: #ccc !important;
@@ -161,16 +178,30 @@
     card.id = `card-${dStr.replace(/\//g, '-')}`; // 設定唯一 ID
     card.className = `card ${s.isMine ? 'mine' : ''} ${isSelected ? 'selected' : ''}`;
       
+    // 判斷按鈕顯示與行為
+    let actionBtn = '';
+    if (s.isMine) {
+      // 已經登記在資料庫的：顯示「取消登記」，觸發 cancelDate
+      actionBtn = `<button class="btn-cancel" onclick="cancelDate('${dStr}')">取消登記</button>`;
+    } else if (isSelected) {
+      // 暫時選取但還沒送出的：顯示「移除」，觸發 toggleSelect
+      actionBtn = `<button class="btn-cancel" onclick="toggleSelect('${dStr}')">移除</button>`;
+    } else if (remains > 0) {
+      // 還有名額且未選取的：顯示「選取」，觸發 toggleSelect
+      actionBtn = `<button class="btn-select" onclick="toggleSelect('${dStr}')">選取</button>`;
+    } else {
+      // 額滿且不是我的：依需求隱藏按鈕
+      actionBtn = `<span style="color:var(--danger); font-size:14px;">❌ 額滿</span>`;
+    }
+
     card.innerHTML = `
       <div class="date-label ${s.isRed ? 'is-weekend' : ''}">
         ${dayNum} (${s.week})
       </div>
       <div style="flex:1; text-align:center;">
-        ${s.isMine ? '<b>● 已登記</b>' : (remains <= 0 ? '❌ 額滿' : `剩 ${remains}`)}
+        ${s.isMine ? '<b style="color:var(--success)">● 已登記</b>' : (remains <= 0 ? '' : `剩 ${remains}`)}
       </div>
-      <button onclick="toggleSelect('${dStr}')">
-        ${s.isMine ? '取消' : (isSelected ? '移除' : '選取')}
-      </button>
+      ${actionBtn}
     `;
     return card;
   }
