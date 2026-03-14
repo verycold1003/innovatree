@@ -224,7 +224,7 @@
   // 3-4. 依selectedDates判斷是否顯示批次登記按鈕
   function updateBatchBar() {
     const bar = document.getElementById('batchBar');
-    document.getElementById('selectedCount').innerText = `已選取 ${selectedDates.length} 天`;
+    document.getElementById('selectedCount').innerText = `${selectedDates.length}`;
     selectedDates.length > 0 ? bar.classList.remove('hidden') : bar.classList.add('hidden');
   }
   
