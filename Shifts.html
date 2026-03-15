@@ -118,25 +118,30 @@
 
   // 1-1. 初始化
   async function init() {
-    await liff.init({ liffId: LIFF_ID });
-    if (!liff.isLoggedIn()) { liff.login(); return; }
-    userProfile = await liff.getProfile();
+    try {
+      await liff.init({ liffId: LIFF_ID });
+      if (!liff.isLoggedIn()) { liff.login(); return; }
+      userProfile = await liff.getProfile();
 
-    // 0-1. 依照 lineId 檢查是否建檔
-    const res = await fetch(`${GAS_URL}?action=get_user&lineId=${userProfile.userId}`);
-    const data = await res.json();
-    
-    if (data.exists) {
-      const initRes = await fetch(`${GAS_URL}?action=init&lineId=${userProfile.userId}`);
-      fullCache = await initRes.json();
-      // 2-1. 班表查詢 初始化
-      renderQuery();
-      // 3-1. 顯示登記排班頁面
-      renderApply();
-    } else {
-      changePage('setting');
+      // 0-1. 依照 lineId 檢查是否建檔
+      const res = await fetch(`${GAS_URL}?action=get_user&lineId=${userProfile.userId}`);
+      const data = await res.json();
+      
+      if (data.exists) {
+        const initRes = await fetch(`${GAS_URL}?action=init&lineId=${userProfile.userId}`);
+        fullCache = await initRes.json();
+        // 2-1. 班表查詢 初始化
+        renderQuery();
+        // 3-1. 顯示登記排班頁面
+        renderApply();
+      } else {
+        changePage('setting');
+      }
+    } catch (err) {
+      console.error("LIFF Init Error:", err);
+    } finally {
+      document.getElementById('loading').classList.add('hidden');
     }
-    document.getElementById('loading').classList.add('hidden');
   }
 
   // 1-2. 切換 1. 基本設定 或 2. 班表查詢 或 3.排班登記
@@ -318,12 +323,30 @@
   // 5-3. 取消登記
   async function cancelDate(dStr) {
     if (!confirm(`確定取消 ${dStr} 的排班？`)) return;
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'cancel', lineId: userProfile.userId, date: dStr })
-    });
-    // 5-2. 更新伺服器年月+2排班登記
-    await refreshApplyData();
+    const btn = event.target;
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerText = "處理中...";
+
+    try {
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'cancel', lineId: userProfile.userId, date: dStr })
+      });
+      const result = await res.json();
+      if (result.result === 'ok') {
+        // 5-2. 更新伺服器年月+2排班登記
+        await refreshApplyData();
+      } else {
+        // 失敗時恢復按鈕狀態
+        btn.disabled = false;
+        btn.innerText = originalText;
+      }
+    } catch (e) {
+      alert("系統錯誤，請稍後再試");
+      btn.disabled = false;
+      btn.innerText = originalText;
+    }
   }
 
   // 2-1. 班表查詢 初始化
