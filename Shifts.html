@@ -170,7 +170,8 @@
   // 3-2. 登記排班單日
   function createCardElement(dStr) {
     const s = fullCache.applyData.shifts[dStr];
-    const dayNum = dStr.split('/')[1] + '/' dStr.split('/')[2];
+    const dateParts = dStr.split('/');
+    const monthDay = `${dateParts[1]}/${dateParts[2]}`;
     const remains = 6 - s.count;
     const isSelected = selectedDates.includes(dStr);
 
@@ -196,7 +197,7 @@
 
     card.innerHTML = `
       <div class="date-label ${s.isRed ? 'is-weekend' : ''}">
-        ${dayNum} (${s.week})
+        ${monthDay} (${s.week})
       </div>
       <div style="flex:1; text-align:center;">
         ${s.isMine ? '<b style="color:var(--success)">● 已登記</b>' : (remains <= 0 ? '' : `剩 ${remains}`)}
@@ -358,7 +359,7 @@
     
     let myCount = 0;
     dates.forEach(dStr => {
-      if (allData[dStr].dayDetail.some(p => p.name === fullCache.user.name)) {
+      if (allData[dStr].day.includes(fullCache.user.name) || allData[dStr].night.includes(fullCache.user.name)) {
         myCount++;
       }
     });
@@ -373,13 +374,23 @@
     
     dates.forEach(dStr => {
       const s = allData[dStr];
-      const day = dStr.split('/')[1] + '/' dStr.split('/')[2];
-      // 後端已抓好所有人名在 dayDetail
-      const names = s.dayDetail.map(p => p.name).join(', ');
-      
+      const dateParts = dStr.split('/');
+      const displayDate = `${dateParts[1]}/${dateParts[2]} (${s.week})`;
+      let infoText = "";
+      if (fullCache.user.role === "admin") {
+        const dNames = s.day.join(', ');
+        const nNames = s.night.join(', ');
+        infoText = `白班: ${dNames || '-'}<br>晚班: ${nNames || '-'}`;
+      } else {
+        const isDay = s.day.includes(fullCache.user.name);
+        const isNight = s.night.includes(fullCache.user.name);
+        if (isDay) infoText = `白班: ${fullCache.user.name}`;
+        else if (isNight) infoText = `晚班: ${fullCache.user.name}`;
+        else infoText = '<span style="color:#ccc">無</span>';
+      }
       html += `<tr>
-        <td class="${s.isRed ? 'is-weekend' : ''}">${day} (${s.week})</td>
-        <td>${names || '<span style="color:#ccc">無</span>'}</td>
+        <td class="${s.isRed ? 'is-weekend' : ''}">${displayDate}</td>
+        <td style="font-size:14px;">${infoText}</td>
       </tr>`;
     });
     
