@@ -114,12 +114,13 @@
   let fullCache = null; // 儲存 init 的完整資料  
   let selectedDates = [];
   let queryMonths = []; // 存儲 YM 字串陣列
+  let userProfile = null;
 
   // 1-1. 初始化
   async function init() {
     await liff.init({ liffId: LIFF_ID });
     if (!liff.isLoggedIn()) { liff.login(); return; }
-    let userProfile = await liff.getProfile();
+    userProfile = await liff.getProfile();
 
     // 0-1. 依照 lineId 檢查是否建檔
     const res = await fetch(`${GAS_URL}?action=get_user&lineId=${userProfile.userId}`);
@@ -271,7 +272,7 @@
         method: 'POST',
         body: JSON.stringify({
           action: 'batch_add',
-          lineId: liff.getContext().userId,
+          lineId: userProfile.userId,
           dates: selectedDates
         })
       });
@@ -307,7 +308,7 @@
   // 5-2. 更新伺服器年月+2排班登記
   async function refreshApplyData() {
     // 僅抓取排班登記部分的更新
-    const res = await fetch(GAS_URL + "?action=apply&lineId=" + userId);
+    const res = await fetch(`${GAS_URL}?action=apply&lineId=${userProfile.userId}`);
     const json = await res.json();
     fullCache.applyData = json.applyData;
     // 3-1. 顯示登記排班頁面
@@ -425,13 +426,11 @@
     });
     const result = await res.json();
     if (result.result === 'ok') {
-      userName = name;
-      userShift = shift;
-      showPage('apply');
+      await init();
     } else {
       alert(result.message);
+      document.getElementById('loading').classList.add('hidden');
     }
-    document.getElementById('loading').classList.add('hidden');
   }
 
   init();
