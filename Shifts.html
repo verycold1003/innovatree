@@ -84,7 +84,7 @@
 
   <!-- 2.排班登記 -->
   <div id="applyPage" class="container">
-    <h3 id="applyYMTitle">載入中...</h3>
+    <h3 id="applyYMTitle"></h3>
     <div id="calendarList"></div>
   </div>
 
@@ -119,6 +119,7 @@
   // 1-1. 初始化
   async function init() {
     try {
+      document.getElementById('loading').classList.remove('hidden');
       await liff.init({ liffId: LIFF_ID });
       if (!liff.isLoggedIn()) { liff.login(); return; }
       userProfile = await liff.getProfile();
@@ -140,7 +141,7 @@
     } catch (err) {
       console.error("LIFF Init Error:", err);
     } finally {
-      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('loading').classList.remove('hidden');
     }
   }
 
@@ -312,12 +313,14 @@
   
   // 5-2. 更新伺服器年月+2排班登記
   async function refreshApplyData() {
+    document.getElementById('loading').classList.remove('hidden');
     // 僅抓取排班登記部分的更新
     const res = await fetch(`${GAS_URL}?action=apply&lineId=${userProfile.userId}`);
     const json = await res.json();
     fullCache.applyData = json.applyData;
     // 3-1. 顯示登記排班頁面
     renderApply(); 
+    document.getElementById('loading').classList.add('hidden');
   }
 
   // 5-3. 取消登記
