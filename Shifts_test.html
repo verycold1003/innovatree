@@ -61,7 +61,7 @@
 
     /* 文字樣式 */
     .is-weekend { color: var(--danger); font-weight: bold; }
-    .date-label { width: 60px; font-size: 1.1em; }
+    .date-label { width: 90px; font-size: 1.1em; }
     
     /* 批次工具列 */
     #batchBar {
@@ -127,7 +127,7 @@
     <button id="btn-query" onclick="changePage('query')">🔍班表查詢</button>
   </nav>
 <script>
-  const LIFF_ID = '2009203505-d0NHkRLn'; 
+  const LIFF_ID = '2009203505-d0NHkRLn'; '正式: YoXdzhWv, 測試: d0NHkRLn
   const GAS_URL = 'https://script.google.com/macros/s/AKfycbxdP936FOYc0ccKaj9xUgTk23idCtlQ8gigIB3Ux2ZTR9mNwRx3AEadi0VzVqdMwhSnZQ/exec';
   let fullCache = null; // 儲存 init 的完整資料  
   let selectedDates = [];
@@ -312,7 +312,7 @@
       const result = await res.json();
       
       if (result.result === 'ok') {
-        let alertMsg = "", fullMsg;
+        let alertMsg = "", fullMsg = "";
         if (result.success.length + result.full.length > 0) {
           if (result.full.length > 0) fullMsg = `⚠️ 額滿：${result.full.join(', ')}\n`;
           if (result.success.length > 0) alertMsg = `✅ 成功：${result.success.length} 天\n`;
