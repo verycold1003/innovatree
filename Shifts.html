@@ -170,7 +170,7 @@
   // 3-2. 登記排班單日
   function createCardElement(dStr) {
     const s = fullCache.applyData.shifts[dStr];
-    const dayNum = dStr.split('/')[2];
+    const dayNum = dStr.split('/')[1] + '/' dStr.split('/')[2];
     const remains = 6 - s.count;
     const isSelected = selectedDates.includes(dStr);
 
@@ -373,7 +373,7 @@
     
     dates.forEach(dStr => {
       const s = allData[dStr];
-      const day = dStr.split('/')[2];
+      const day = dStr.split('/')[1] + '/' dStr.split('/')[2];
       // 後端已抓好所有人名在 dayDetail
       const names = s.dayDetail.map(p => p.name).join(', ');
       
