@@ -61,7 +61,7 @@
 
     /* 文字樣式 */
     .is-weekend { color: var(--danger); font-weight: bold; }
-    .date-label { width: 60px; font-size: 1.1em; }
+    .date-label { width: 90px; font-size: 1.1em; }
     
     /* 批次工具列 */
     #batchBar {
@@ -115,17 +115,19 @@
     </div>
   </div>
 
+  <!-- 3-1. 批次選取排班數量 -->
   <div id="batchBar" class="hidden">
     <span>已選 <b id="selectedCount">0</b> 天</span>
     <button id="submitBtn" onclick="submitBatch()" style="background:var(--success); color:white; border:none; padding:10px 20px; border-radius:5px;">確認提交</button>
   </div>
 
+  <!-- nav -->
   <nav id="mainNav">
     <button id="btn-apply" class="active" onclick="changePage('apply')">📅排班登記</button>
     <button id="btn-query" onclick="changePage('query')">🔍班表查詢</button>
   </nav>
 <script>
-  const LIFF_ID = '2009203505-YoXdzhWv'; 
+  const LIFF_ID = '2009203505-YoXdzhWv'; //正式: YoXdzhWv, 測試: d0NHkRLn
   const GAS_URL = 'https://script.google.com/macros/s/AKfycbxdP936FOYc0ccKaj9xUgTk23idCtlQ8gigIB3Ux2ZTR9mNwRx3AEadi0VzVqdMwhSnZQ/exec';
   let fullCache = null; // 儲存 init 的完整資料  
   let selectedDates = [];
@@ -151,31 +153,34 @@
         renderQuery();
         // 3-1. 顯示登記排班頁面
         renderApply();
+        // 1. 切換到 3.排班登記(跳過更新apply)
+        changePage('apply', true);
       } else {
         // 1. 切換到 1.基本設定
         changePage('setting');
       }
     } catch (err) {
-      console.error("LIFF Init Error:", err);
+      console.error("init():", err);
+      alert("系統錯誤，請聯絡管理者");
     } finally {
       document.getElementById('loading').classList.add('hidden');
     }
   }
 
   // 1-2. 切換 1. 基本設定 或 2. 班表查詢 或 3.排班登記
-  async function changePage(p) {
+  async function changePage(p, skipApply = false) {
     document.getElementById('applyPage').classList.toggle('hidden', p !== 'apply');
     document.getElementById('queryPage').classList.toggle('hidden', p !== 'query');
     document.getElementById('btn-apply').classList.toggle('active', p === 'apply');
     document.getElementById('btn-query').classList.toggle('active', p === 'query');
     document.getElementById('settingPage').classList.toggle('hidden', p !== 'setting');
-    if (p == 'apply') {
+    if (p == 'apply'&& !skipApply) {
       // 5-2. 更新伺服器年月+2排班登記
       await refreshApplyData(); 
     }
   }
 
-  // 3-1. 顯示登記排班頁面
+  // 3-1. 顯示排班登記頁面
   function renderApply() {
     const data = fullCache.applyData;
     const list = document.getElementById('calendarList');
@@ -189,13 +194,13 @@
     list.innerHTML = '';
 
     Object.keys(data.shifts).sort().forEach(dStr => {
-      // 3-2. 登記排班單日
+      // 3-2. 顯示排班登記單日card
       const card = createCardElement(dStr);
       list.appendChild(card);
     });
   }
 
-  // 3-2. 登記排班單日
+  // 3-2. 顯示排班登記單日card
   function createCardElement(dStr) {
     const s = fullCache.applyData.shifts[dStr];
     const dateParts = dStr.split('/');
@@ -211,7 +216,7 @@
     let actionBtn = '';
     if (s.isMine) {
       // 已經登記在資料庫的：顯示「取消登記」，觸發 cancelDate
-      actionBtn = `<button class="btn-cancel" onclick="cancelDate('${dStr}')">取消登記</button>`;
+      actionBtn = `<button class="btn-cancel" onclick="cancelDate(event, '${dStr}')">取消登記</button>`;
     } else if (isSelected) {
       // 暫時選取但還沒送出的：顯示「移除」，觸發 toggleSelect
       actionBtn = `<button class="btn-cancel" onclick="toggleSelect('${dStr}')">移除</button>`;
@@ -235,7 +240,7 @@
     return card;
   }
     
-  // 3-3. 排班點選某日
+  // 3-3. 排班登記點選某日
   function toggleSelect(dStr) {
     const data = fullCache.applyData;
     const s = data.shifts[dStr];
@@ -257,16 +262,17 @@
     }
     
     const oldCard = document.getElementById(`card-${dStr.replace(/\//g, '-')}`);
-    // 3-2. 登記排班單日
+    // 3-2. 更新顯示排班登記單日card
     const newCard = createCardElement(dStr);
     oldCard.parentNode.replaceChild(newCard, oldCard);
 
     // 3-4. 依selectedDates判斷是否顯示批次登記按鈕
     updateBatchBar();
-    
+    // 3-5. 更新顯示假日額度
     updateHolidayHeader(data);
   }
 
+  // 3-5. 更新顯示假日額度
   function updateHolidayHeader(data) {
     const registered = Object.values(data.shifts).filter(s => s.isMine && s.isRed).length;
     const selected = selectedDates.filter(date => data.shifts[date].isRed).length;
@@ -306,14 +312,14 @@
       const result = await res.json();
       
       if (result.result === 'ok') {
-        let alertMsg = "";
+        let alertMsg = "", fullMsg = "";
         if (result.success.length + result.full.length > 0) {
-          if (result.success.length > 0) alertMsg += `✅ 成功：${result.success.length} 天\n`;
-          if (result.full.length > 0) alertMsg += `⚠️ 額滿：${result.full.join(', ')}\n`;
-          alert(alertMsg);
+          if (result.full.length > 0) fullMsg = `⚠️ 額滿：${result.full.join(', ')}\n`;
+          if (result.success.length > 0) alertMsg = `✅ 成功：${result.success.length} 天\n`;
+          alert(fullMsg + alertMsg);
           await liff.sendMessages([{ 
               type: 'text', 
-              text: `📅 排班結果：\n${alertMsg}` 
+              text: `📅 排班結果：\n${fullMsg}✅ 成功：${result.success.join(', ')}` 
           }]);
         }
         // 清空選取
@@ -325,8 +331,9 @@
       } else {
         alert("失敗：" + result.message);
       }
-    } catch (e) {
-      alert("系統錯誤");
+    } catch (err) {
+      console.error("submitBatch():", err);
+      alert("系統錯誤，請聯絡管理者");
     }
     btn.disabled = false;
     btn.innerText = "確認提交";
@@ -345,9 +352,9 @@
   }
 
   // 5-3. 取消登記
-  async function cancelDate(dStr) {
+  async function cancelDate(e, dStr) {
     if (!confirm(`確定取消 ${dStr} 的排班？`)) return;
-    const btn = event.target;
+    const btn = e.target;
     const originalText = btn.innerText;
     btn.disabled = true;
     btn.innerText = "處理中...";
@@ -366,8 +373,9 @@
         btn.disabled = false;
         btn.innerText = originalText;
       }
-    } catch (e) {
-      alert("系統錯誤，請稍後再試");
+    } catch (err) {
+      console.error("cancelDate():", err);
+      alert("系統錯誤，請聯絡管理者");
       btn.disabled = false;
       btn.innerText = originalText;
     }
@@ -461,26 +469,33 @@
     if (!name) { alert("請輸入姓名"); return; }
     document.getElementById('loading').classList.remove('hidden');
 
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'save_user',
-        lineId: userProfile.userId,
-        lineName: userProfile.displayName,
-        name: name,
-        shift: shift
-      })
-    });
-    const result = await res.json();
-    if (result.result === 'ok') {
-      // 切換到 3. 排班登記
-      changePage('apply');
-    } else {
-      alert(result.message);
+    try {
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'save_user',
+          lineId: userProfile.userId,
+          lineName: userProfile.displayName,
+          name: name,
+          shift: shift
+        })
+      });
+      const result = await res.json();
+      if (result.result === 'ok') {
+        // 1-1. 重新初始化
+        await init();
+      } else {
+        alert(result.message);
+        document.getElementById('loading').classList.add('hidden');
+      }
+    } catch (err) {
+      console.error("saveUser():", err);
+      alert("系統錯誤，請聯絡管理者");
       document.getElementById('loading').classList.add('hidden');
     }
   }
 
+  // 1-1. 初始化
   init();
 </script>
 </body>
