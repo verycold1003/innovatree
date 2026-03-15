@@ -317,10 +317,10 @@
           if (result.full.length > 0) fullMsg = `⚠️ 額滿：${result.full.join(', ')}\n`;
           if (result.success.length > 0) alertMsg = `✅ 成功：${result.success.length} 天\n`;
           alert(fullMsg + alertMsg);
-          await liff.sendMessages([{ 
+          /*await liff.sendMessages([{ 
               type: 'text', 
               text: `📅 排班結果：\n${fullMsg}✅ 成功：${result.success.join(', ')}` 
-          }]);
+          }]);*/
         }
         // 清空選取
         selectedDates = [];
