@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>排班系統</title>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    :root { --primary: #007bff; --success: #28a745; --danger: #dc3545; --bg: #f8f9fa; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); margin: 0; padding-bottom: 80px; }
+    .container { padding: 15px; }
+    .hidden { display: none !important; }
+    #loading {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.8); /* 半透明背景，遮住後方按鈕防止重複點擊 */
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999; /* 確保在所有元件最上方 */
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: var(--primary);
+    }
+    /* 登記卡片 */
+    .card { background: white; border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .card.selected { border: 2px solid var(--primary); background: #e7f3ff; }
+    .card.mine { border-left: 5px solid var(--success); }
+    .card.selected button {
+      background-color: var(--primary);
+      color: white;
+      border: none;
+    }
+    /* 按鈕通用樣式 */
+    button { 
+      padding: 8px 15px; 
+      border-radius: 6px; 
+      border: none; 
+      cursor: pointer; 
+      transition: 0.2s;
+    }
+    /* 「選取」按鈕：藍色 */
+    .btn-select { background-color: var(--primary); color: white; }
+
+    /* 「取消/移除」按鈕：灰色或紅色 */
+    .btn-cancel { background-color: #6c757d; color: white; }
+
+    /* 班表查詢：隱藏非選取的月份 */
+    .q-month-tab { display: none; }
+    .q-month-tab.active { display: block; }
+    /* 當按鈕被禁用時的樣式 */
+    button:disabled {
+      background-color: #ccc !important;
+      color: #666 !important;
+      cursor: not-allowed;
+    }
+
+    /* 文字樣式 */
+    .is-weekend { color: var(--danger); font-weight: bold; }
+    .date-label { width: 60px; font-size: 1.1em; }
+    
+    /* 批次工具列 */
+    #batchBar {
+      position: fixed; bottom: 65px; left: 0; width: 100%;
+      background: rgba(0,0,0,0.85); color: white;
+      padding: 12px 20px; display: flex; justify-content: space-between; align-items: center;
+      box-sizing: border-box; z-index: 100;
+    }
+    
+    /* 導覽列 */
+    nav {
+      position: fixed; bottom: 0; left: 0; width: 100%; height: 60px;
+      background: white; display: flex; border-top: 1px solid #ddd; z-index: 101;
+    }
+    nav button { flex: 1; border: none; background: none; font-size: 16px; color: #555; }
+    nav button.active { color: var(--primary); font-weight: bold; }
+
+    /* 表格樣式 (查詢頁面用) */
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+    th { background: #eee; }  
+  </style>
+</head>
+<body>
+  <div id="loading" style="text-align:center; margin-top:50px;">⏳ 請稍候...</div>
+  <!-- 1.基本設定 -->
+  <div id="settingPage" class="container hidden">
+    <p>請設定您的姓名與班別</p>
+    <input type="text" id="inputName" placeholder="請輸入姓名" style="width:90%; padding:10px; margin-bottom:15px;">
+    <div style="margin-bottom:20px;">
+      <label><input type="radio" name="inputShift" value="白班" checked> 白班</label>
+      <label style="margin-left:20px;"><input type="radio" name="inputShift" value="晚班"> 晚班</label>
+    </div>
+    <button class="btn btn-blue" onclick="saveUser()" style="width:100%; padding:12px;">儲存</button>
+  </div>
+
+  <!-- 2.排班登記 -->
+  <div id="applyPage" class="container">
+    <h3 id="applyYMTitle"></h3>
+    <div id="calendarList"></div>
+  </div>
+
+  <!-- 3.班表查詢 -->
+  <div id="queryPage" class="container hidden">
+    <h3>班表查詢</h3>
+    <select id="queryYM" onchange="switchQueryTab()" style="width:100%; padding:10px; margin-bottom:15px; border-radius:6px; border:1px solid #ccc;"></select>
+    <div id="qTabContent">
+      <div id="qTab-0" class="q-month-tab"></div>
+      <div id="qTab-1" class="q-month-tab"></div>
+      <div id="qTab-2" class="q-month-tab"></div>
+    </div>
+  </div>
+
+  <!-- 3-1. 批次選取排班數量 -->
+  <div id="batchBar" class="hidden">
+    <span>已選 <b id="selectedCount">0</b> 天</span>
+    <button id="submitBtn" onclick="submitBatch()" style="background:var(--success); color:white; border:none; padding:10px 20px; border-radius:5px;">確認提交</button>
+  </div>
+
+  <!-- nav -->
+  <nav id="mainNav">
+    <button id="btn-apply" class="active" onclick="changePage('apply')">📅排班登記</button>
+    <button id="btn-query" onclick="changePage('query')">🔍班表查詢</button>
+  </nav>
+<script>
+  const LIFF_ID = '2009203505-YoXdzhWv'; 
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbxdP936FOYc0ccKaj9xUgTk23idCtlQ8gigIB3Ux2ZTR9mNwRx3AEadi0VzVqdMwhSnZQ/exec';
+  let fullCache = null; // 儲存 init 的完整資料  
+  let selectedDates = [];
+  let queryMonths = []; // 存儲 YM 字串陣列
+  let userProfile = null;
+
+  // 1-1. 初始化
+  async function init() {
+    try {
+      document.getElementById('loading').classList.remove('hidden');
+      await liff.init({ liffId: LIFF_ID });
+      if (!liff.isLoggedIn()) { liff.login(); return; }
+      userProfile = await liff.getProfile();
+
+      // 0-1. 依照 lineId 檢查是否建檔
+      const res = await fetch(`${GAS_URL}?action=get_user&lineId=${userProfile.userId}`);
+      const data = await res.json();
+      
+      if (data.exists) {
+        const initRes = await fetch(`${GAS_URL}?action=init&lineId=${userProfile.userId}`);
+        fullCache = await initRes.json();
+        // 2-1. 班表查詢 初始化
+        renderQuery();
+        // 3-1. 顯示登記排班頁面
+        renderApply();
+        // 1. 切換到 3.排班登記(跳過更新apply)
+        changePage('apply', true);
+      } else {
+        // 1. 切換到 1.基本設定
+        changePage('setting');
+      }
+    } catch (err) {
+      console.error("init():", err);
+      alert("系統錯誤，請聯絡管理者");
+    } finally {
+      document.getElementById('loading').classList.add('hidden');
+    }
+  }
+
+  // 1-2. 切換 1. 基本設定 或 2. 班表查詢 或 3.排班登記
+  async function changePage(p, skipApply = false) {
+    document.getElementById('applyPage').classList.toggle('hidden', p !== 'apply');
+    document.getElementById('queryPage').classList.toggle('hidden', p !== 'query');
+    document.getElementById('btn-apply').classList.toggle('active', p === 'apply');
+    document.getElementById('btn-query').classList.toggle('active', p === 'query');
+    document.getElementById('settingPage').classList.toggle('hidden', p !== 'setting');
+    if (p == 'apply'&& !skipApply) {
+      // 5-2. 更新伺服器年月+2排班登記
+      await refreshApplyData(); 
+    }
+  }
+
+  // 3-1. 顯示排班登記頁面
+  function renderApply() {
+    const data = fullCache.applyData;
+    const list = document.getElementById('calendarList');
+    const holidayCount = Object.values(data.shifts).filter(s => s.isMine && s.isRed).length;
+    document.getElementById('applyYMTitle').innerHTML = `
+      ${data.ym} 排班登記 
+      <div style="font-size:14px; color:var(--danger); margin-top:5px;">
+        📌 已排假日：${holidayCount} 天
+      </div>
+    `;
+    list.innerHTML = '';
+
+    Object.keys(data.shifts).sort().forEach(dStr => {
+      // 3-2. 顯示排班登記單日card
+      const card = createCardElement(dStr);
+      list.appendChild(card);
+    });
+  }
+
+  // 3-2. 顯示排班登記單日card
+  function createCardElement(dStr) {
+    const s = fullCache.applyData.shifts[dStr];
+    const dateParts = dStr.split('/');
+    const monthDay = `${dateParts[1]}/${dateParts[2]}`;
+    const remains = 6 - s.count;
+    const isSelected = selectedDates.includes(dStr);
+
+    const card = document.createElement('div');
+    card.id = `card-${dStr.replace(/\//g, '-')}`; // 設定唯一 ID
+    card.className = `card ${s.isMine ? 'mine' : ''} ${isSelected ? 'selected' : ''}`;
+      
+    // 判斷按鈕顯示與行為
+    let actionBtn = '';
+    if (s.isMine) {
+      // 已經登記在資料庫的：顯示「取消登記」，觸發 cancelDate
+      actionBtn = `<button class="btn-cancel" onclick="cancelDate(event, '${dStr}')">取消登記</button>`;
+    } else if (isSelected) {
+      // 暫時選取但還沒送出的：顯示「移除」，觸發 toggleSelect
+      actionBtn = `<button class="btn-cancel" onclick="toggleSelect('${dStr}')">移除</button>`;
+    } else if (remains > 0) {
+      // 還有名額且未選取的：顯示「選取」，觸發 toggleSelect
+      actionBtn = `<button class="btn-select" onclick="toggleSelect('${dStr}')">選取</button>`;
+    } else {
+      // 額滿且不是我的：依需求隱藏按鈕
+      actionBtn = `<span style="color:var(--danger); font-size:14px;">❌ 額滿</span>`;
+    }
+
+    card.innerHTML = `
+      <div class="date-label ${s.isRed ? 'is-weekend' : ''}">
+        ${monthDay} (${s.week})
+      </div>
+      <div style="flex:1; text-align:center;">
+        ${s.isMine ? '<b style="color:var(--success)">● 已登記</b>' : (remains <= 0 ? '' : `剩 ${remains}`)}
+      </div>
+      ${actionBtn}
+    `;
+    return card;
+  }
+    
+  // 3-3. 排班登記點選某日
+  function toggleSelect(dStr) {
+    const data = fullCache.applyData;
+    const s = data.shifts[dStr];
+    const idx = selectedDates.indexOf(dStr);
+    
+    if (idx === -1 && s.isRed) {
+      const registeredHolidays = Object.values(data.shifts).filter(item => item.isMine && item.isRed).length;
+      const selectedHolidays = selectedDates.filter(date => data.shifts[date].isRed).length;
+      if (registeredHolidays + selectedHolidays >= 5) {
+        alert("⚠️ 本月假日登記已達 5 天上限！");
+        return;
+      }
+    }
+    
+    if (idx > -1) {
+      selectedDates.splice(idx, 1);
+    } else {
+      selectedDates.push(dStr);
+    }
+    
+    const oldCard = document.getElementById(`card-${dStr.replace(/\//g, '-')}`);
+    // 3-2. 更新顯示排班登記單日card
+    const newCard = createCardElement(dStr);
+    oldCard.parentNode.replaceChild(newCard, oldCard);
+
+    // 3-4. 依selectedDates判斷是否顯示批次登記按鈕
+    updateBatchBar();
+    // 3-5. 更新顯示假日額度
+    updateHolidayHeader(data);
+  }
+
+  // 3-5. 更新顯示假日額度
+  function updateHolidayHeader(data) {
+    const registered = Object.values(data.shifts).filter(s => s.isMine && s.isRed).length;
+    const selected = selectedDates.filter(date => data.shifts[date].isRed).length;
+    const total = registered + selected;
+    
+    const headerEl = document.getElementById('applyYMTitle');
+    headerEl.innerHTML = `
+      ${data.ym} 排班登記 
+      <div style="font-size:14px; color:${total >= 5 ? 'var(--danger)' : 'var(--success)'}; margin-top:5px;">
+        📌 假日額度：${total} / 5 (已選+已登記)
+      </div>
+    `;
+  }
+  
+  // 3-4. 依selectedDates判斷是否顯示批次登記按鈕
+  function updateBatchBar() {
+    const bar = document.getElementById('batchBar');
+    document.getElementById('selectedCount').innerText = `${selectedDates.length}`;
+    selectedDates.length > 0 ? bar.classList.remove('hidden') : bar.classList.add('hidden');
+  }
+  
+  // 5-1. 批次提交登記
+  async function submitBatch() {
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.innerText = "提交中...";
+
+    try {
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'batch_add',
+          lineId: userProfile.userId,
+          dates: selectedDates
+        })
+      });
+      const result = await res.json();
+      
+      if (result.result === 'ok') {
+        let alertMsg = "", fullMsg;
+        if (result.success.length + result.full.length > 0) {
+          if (result.full.length > 0) fullMsg = `⚠️ 額滿：${result.full.join(', ')}\n`;
+          if (result.success.length > 0) alertMsg = `✅ 成功：${result.success.length} 天\n`;
+          alert(fullMsg + alertMsg);
+          await liff.sendMessages([{ 
+              type: 'text', 
+              text: `📅 排班結果：\n${fullMsg}✅ 成功：${result.success.join(', ')}` 
+          }]);
+        }
+        // 清空選取
+        selectedDates = [];
+        // 3-4. 依selectedDates判斷是否顯示批次登記按鈕
+        updateBatchBar();
+        // 5-2. 更新伺服器年月+2排班登記
+        await refreshApplyData(); 
+      } else {
+        alert("失敗：" + result.message);
+      }
+    } catch (err) {
+      console.error("submitBatch():", err);
+      alert("系統錯誤，請聯絡管理者");
+    }
+    btn.disabled = false;
+    btn.innerText = "確認提交";
+  }
+  
+  // 5-2. 更新伺服器年月+2排班登記
+  async function refreshApplyData() {
+    document.getElementById('loading').classList.remove('hidden');
+    // 僅抓取排班登記部分的更新
+    const res = await fetch(`${GAS_URL}?action=apply&lineId=${userProfile.userId}`);
+    const json = await res.json();
+    fullCache.applyData = json.applyData;
+    // 3-1. 顯示登記排班頁面
+    renderApply(); 
+    document.getElementById('loading').classList.add('hidden');
+  }
+
+  // 5-3. 取消登記
+  async function cancelDate(e, dStr) {
+    if (!confirm(`確定取消 ${dStr} 的排班？`)) return;
+    const btn = e.target;
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerText = "處理中...";
+
+    try {
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'cancel', lineId: userProfile.userId, date: dStr })
+      });
+      const result = await res.json();
+      if (result.result === 'ok') {
+        // 5-2. 更新伺服器年月+2排班登記
+        await refreshApplyData();
+      } else {
+        // 失敗時恢復按鈕狀態
+        btn.disabled = false;
+        btn.innerText = originalText;
+      }
+    } catch (err) {
+      console.error("cancelDate():", err);
+      alert("系統錯誤，請聯絡管理者");
+      btn.disabled = false;
+      btn.innerText = originalText;
+    }
+  }
+
+  // 2-1. 班表查詢 初始化
+  function renderQuery() {
+    const data = fullCache.queryData;
+    const select = document.getElementById('queryYM');
+    select.innerHTML = '';
+
+    // 1. 提取月份並填入下拉選單
+    const ymSet = new Set();
+    Object.keys(data).forEach(d => ymSet.add(d.substring(0, 7)));
+    queryMonths = Array.from(ymSet).sort();
+
+    queryMonths.forEach((ym, idx) => {
+      const opt = document.createElement('option');
+      opt.value = idx;
+      opt.innerText = ym;
+      select.appendChild(opt);
+      
+      // 2-2. 班表查詢 顯示每月的班表
+      renderMonthTable(ym, `qTab-${idx}`, data);
+    });
+
+    // 預設顯示當前月 (通常是中間那個)
+    select.value = 1;
+    // 2-3. 班表查詢 切換年月
+    switchQueryTab();
+  }
+  
+  // 2-2. 班表查詢 顯示每月的班表
+  function renderMonthTable(ym, tabId, allData) {
+    const container = document.getElementById(tabId);
+    const dates = Object.keys(allData).filter(d => d.startsWith(ym)).sort();
+    
+    let myCount = 0;
+    dates.forEach(dStr => {
+      if (allData[dStr].day.includes(fullCache.user.name) || allData[dStr].night.includes(fullCache.user.name)) {
+        myCount++;
+      }
+    });
+    let html = `
+      <div style="background:#e9ecef; padding:10px; border-radius:5px; margin-bottom:10px; font-weight:bold;">
+        📊 本月總計：${myCount} 天
+      </div>
+      <table>
+        <thead><tr><th>日期</th><th>人員 (${fullCache.user.role === 'admin' ? '全部' : '個人'})</th></tr></thead>
+        <tbody>
+    `;
+    
+    dates.forEach(dStr => {
+      const s = allData[dStr];
+      const dateParts = dStr.split('/');
+      const displayDate = `${dateParts[1]}/${dateParts[2]} (${s.week})`;
+      let infoText = "";
+      if (fullCache.user.role === "admin") {
+        const dNames = s.day.join(', ');
+        const nNames = s.night.join(', ');
+        infoText = `白班: ${dNames || '-'}<br>晚班: ${nNames || '-'}`;
+      } else {
+        const isDay = s.day.includes(fullCache.user.name);
+        const isNight = s.night.includes(fullCache.user.name);
+        if (isDay) infoText = `白班: ${fullCache.user.name}`;
+        else if (isNight) infoText = `晚班: ${fullCache.user.name}`;
+        else infoText = '<span style="color:#ccc">無</span>';
+      }
+      html += `<tr>
+        <td class="${s.isRed ? 'is-weekend' : ''}">${displayDate}</td>
+        <td style="font-size:14px;">${infoText}</td>
+      </tr>`;
+    });
+    
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+  }
+  
+  // 2-3. 班表查詢 切換年月
+  function switchQueryTab() {
+    const idx = document.getElementById('queryYM').value;
+    document.querySelectorAll('.q-month-tab').forEach((el, i) => {
+      el.classList.toggle('active', i == idx);
+    });
+  }
+
+  // 1. 儲存基本設定
+  async function saveUser() {
+    const name = document.getElementById('inputName').value.trim();
+    const shift = document.querySelector('input[name="inputShift"]:checked').value;
+    if (!name) { alert("請輸入姓名"); return; }
+    document.getElementById('loading').classList.remove('hidden');
+
+    try {
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'save_user',
+          lineId: userProfile.userId,
+          lineName: userProfile.displayName,
+          name: name,
+          shift: shift
+        })
+      });
+      const result = await res.json();
+      if (result.result === 'ok') {
+        // 1-1. 重新初始化
+        await init();
+      } else {
+        alert(result.message);
+        document.getElementById('loading').classList.add('hidden');
+      }
+    } catch (err) {
+      console.error("saveUser():", err);
+      alert("系統錯誤，請聯絡管理者");
+      document.getElementById('loading').classList.add('hidden');
+    }
+  }
+
+  // 1-1. 初始化
+  init();
+</script>
+</body>
+</html>
