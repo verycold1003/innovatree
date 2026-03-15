@@ -163,7 +163,7 @@
   }
 
   // 1-2. 切換 1. 基本設定 或 2. 班表查詢 或 3.排班登記
-  function changePage(p) {
+  async function changePage(p) {
     document.getElementById('applyPage').classList.toggle('hidden', p !== 'apply');
     document.getElementById('queryPage').classList.toggle('hidden', p !== 'query');
     document.getElementById('btn-apply').classList.toggle('active', p === 'apply');
@@ -320,7 +320,7 @@
         selectedDates = [];
         // 3-4. 依selectedDates判斷是否顯示批次登記按鈕
         updateBatchBar();
-        // 5-2. 更新伺服器年月+2排班登記(含清空選取)
+        // 5-2. 更新伺服器年月+2排班登記
         await refreshApplyData(); 
       } else {
         alert("失敗：" + result.message);
